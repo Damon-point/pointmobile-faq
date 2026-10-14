@@ -245,48 +245,50 @@ def try_claude(request: Request):
 
 # ── 계정 ─────────────────────────────────────────────────────────────────────
 
+def _ts_full(dt) -> str:
+    return dt.isoformat(timespec="seconds") if dt else ""
+
+
 @router.get("/accounts")
 def accounts(request: Request):
     u = user(request)
-    from app.accounts import INITIAL_PASSWORD, ROLE_LABEL
+    from app.accounts import INITIAL_PASSWORD, ROLE_LABEL, STATUS_LABEL
     from app.user_mailer import system_from, user_email
 
     f_addr, f_name, _ = system_from()
     rows = []
     if u.get("role") == "admin":
         with get_session() as db:
-            users = [(x.id, x.username, x.role or "user", bool(x.must_change_password))
-                     for x in db.query(User).order_by(User.id).all()]
-        rows = [{"id": i, "username": n, "role": r, "must_change": m, "email": user_email(i) or "", "me": i == u["id"]}
-                for i, n, r, m in users]
-    return {"roles": ROLE_LABEL, "users": rows, "system_from": f_addr or "", "system_from_name": f_name or "",
+            users = db.query(User).order_by(User.id).all()
+            rows = [{"id": x.id, "username": x.username, "role": x.role or "user", "must_change": bool(x.must_change_password),
+                     "status": x.status or "approved", "company": x.company or "", "email_field": x.email or "",
+                     "requested_at": _ts_full(x.requested_at), "decided_by": x.decided_by or "",
+                     "decided_at": _ts_full(x.decided_at), "reject_reason": x.reject_reason or "",
+                     "me": x.id == u["id"]} for x in users]
+        for r in rows:
+            r["email"] = r.pop("email_field") or user_email(r["id"]) or ""
+    return {"roles": ROLE_LABEL, "statuses": STATUS_LABEL, "users": rows,
+            "system_from": f_addr or "", "system_from_name": f_name or "",
             "initial_password": INITIAL_PASSWORD if u.get("role") == "admin" else ""}
 
 
-class NewAccountIn(BaseModel):
-    username: str
-    role: str = "user"
+class DecideIn(BaseModel):
+    approve: bool
+    reason: str = ""
 
 
-@router.post("/accounts")
-def create_account(body: NewAccountIn, request: Request):
+@router.post("/accounts/{uid}/decide")
+def decide_signup(uid: int, body: DecideIn, request: Request):
+    """가입 승인 · 반려 — 결과는 신청자에게 메일로(검증 모드면 기록만)."""
     u = admin(request)
-    from app.account_mail import send_welcome
-    from app.accounts import INITIAL_PASSWORD, VALID_ROLES
+    from app.account_mail import send_signup_result
+    from app.accounts import decide_signup as _decide
 
-    uname = body.username.strip()
-    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", uname):
-        _bad("아이디는 회사 이메일 주소 형식이어야 합니다")
-    if body.role not in VALID_ROLES:
-        _bad("모르는 역할입니다")
-    with get_session() as db:
-        if db.query(User).filter_by(username=uname).first():
-            _bad(f"'{uname}' 은 이미 있는 아이디입니다", 409)
-        db.add(User(username=uname, password_hash=hash_password(INITIAL_PASSWORD), role=body.role,
-                    must_change_password=True))
-        db.commit()
-    sent, why = send_welcome(u["id"], uname)
-    return {"ok": True, "message": f"'{uname}' 계정을 만들었습니다" + (" · 안내 메일 발송" if sent else f" · 안내 메일 실패: {why}")}
+    ok, msg, info = _decide(uid, body.approve, u["username"], body.reason)
+    if not ok:
+        _bad(msg, 409)
+    sent, why = send_signup_result(info, body.approve)
+    return {"ok": True, "message": msg + (" · 안내 메일 발송" if sent else f" · 안내 메일 못 보냄: {why}")}
 
 
 class RoleIn(BaseModel):

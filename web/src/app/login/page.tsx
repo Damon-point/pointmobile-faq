@@ -1,17 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { api } from "@/lib/api";
-import { ThemeCycle } from "@/components/ThemeToggle";
+import { AuthField, AuthShell, authInput } from "@/components/AuthShell";
+import { ApiError, api } from "@/lib/api";
 
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [username, setU] = useState("");
+  const [username, setU] = useState(params.get("id") ?? "");
   const [password, setP] = useState("");
   const [err, setErr] = useState("");
+  const [held, setHeld] = useState(false);       // 승인 대기 · 반려 — 오류가 아니라 상태 안내
   const [busy, setBusy] = useState(false);
+  const justSigned = params.get("signed") === "1";
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,6 +24,7 @@ function LoginForm() {
       await api("/api/login", { method: "POST", body: JSON.stringify({ username, password }) });
       router.replace(params.get("next") || "/");
     } catch (e) {
+      setHeld(e instanceof ApiError && e.status === 403);
       setErr(e instanceof Error ? e.message : "로그인 실패");
     } finally {
       setBusy(false);
@@ -28,36 +32,37 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={submit} className="w-[380px] max-w-[92vw] rounded-2xl border border-line bg-surface p-7 shadow-sm">
-      <div className="mb-6 flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-[#14b8a6] to-[#0d9488] text-[13px] font-extrabold text-white">SB</span>
-        <div>
-          <div className="text-[16px] font-bold">Solution Buffer</div>
-          <div className="text-[12px] text-ink-3">TW Automation 계정으로 로그인</div>
+    <form onSubmit={submit}>
+      {justSigned && !err && (
+        <div className="mb-4 rounded-lg bg-ok-soft px-3 py-2.5 text-[13px] text-ok">
+          가입 신청을 받았습니다. 관리자가 승인하면 로그인할 수 있습니다.
         </div>
-      </div>
-      {err && <div className="mb-4 rounded-lg bg-err-soft px-3 py-2 text-[13px] text-err">{err}</div>}
-      <label className="mb-1.5 block text-[13px] font-semibold text-ink-2" htmlFor="u">아이디</label>
-      <input id="u" autoFocus autoComplete="username" value={username} onChange={(e) => setU(e.target.value)}
-             className="mb-4 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft" />
-      <label className="mb-1.5 block text-[13px] font-semibold text-ink-2" htmlFor="p">비밀번호</label>
-      <input id="p" type="password" autoComplete="current-password" value={password} onChange={(e) => setP(e.target.value)}
-             className="mb-5 w-full rounded-lg border border-line-strong bg-surface px-3 py-2 outline-none focus:border-brand focus:ring-2 focus:ring-brand-soft" />
+      )}
+      {err && <div className={`mb-4 rounded-lg px-3 py-2.5 text-[13px] ${held ? "bg-warn-soft text-warn" : "bg-err-soft text-err"}`}>{err}</div>}
+      <AuthField id="u" label="ID">
+        <input id="u" autoFocus={!username} autoComplete="username" value={username} onChange={(e) => setU(e.target.value)} className={authInput} />
+      </AuthField>
+      <AuthField id="p" label="비밀번호">
+        <input id="p" autoFocus={!!username} type="password" autoComplete="current-password" value={password}
+               onChange={(e) => setP(e.target.value)} className={authInput} />
+      </AuthField>
       <button disabled={busy || !username || !password}
-              className="w-full rounded-lg bg-brand py-2.5 text-[14px] font-semibold text-white hover:bg-brand-ink disabled:opacity-50">
+              className="mt-1 w-full rounded-lg bg-brand py-2.5 text-[14px] font-semibold text-white hover:bg-brand-ink disabled:opacity-50">
         {busy ? "확인 중…" : "로그인"}
       </button>
+      <div className="mt-5 border-t border-line pt-4 text-center text-[13px] text-ink-3">
+        계정이 없으면 <Link href="/signup" className="font-semibold text-brand-ink hover:underline">회원가입</Link>
+      </div>
     </form>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="relative grid min-h-screen place-items-center bg-[radial-gradient(1200px_600px_at_20%_-10%,#dbe6ff_0%,transparent_60%)] dark:bg-[radial-gradient(1200px_600px_at_20%_-10%,#1b2742_0%,transparent_60%)]">
-      <ThemeCycle className="absolute right-4 top-4 text-ink-3 hover:bg-surface-2 hover:text-ink" />
+    <AuthShell sub="로그인">
       <Suspense>
         <LoginForm />
       </Suspense>
-    </div>
+    </AuthShell>
   );
 }

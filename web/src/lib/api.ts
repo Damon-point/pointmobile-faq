@@ -20,7 +20,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       msg = (await res.json()).error ?? msg;
     } catch {}
-    if (res.status === 401 && typeof window !== "undefined" && !location.pathname.startsWith("/login")) {
+    if (res.status === 401 && typeof window !== "undefined" && !location.pathname.startsWith("/login") && !location.pathname.startsWith("/signup")) {
       location.href = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
     }
     throw new ApiError(res.status, msg);
@@ -75,7 +75,7 @@ export function useApi<T>(path: string | null, refreshMs?: number | ((d: T | nul
 
 export type Tone = "ok" | "warn" | "error" | "none";
 export type Summary = { tone: Tone; headline: string; errors: string[]; warnings: string[]; ok_count: number };
-export type Me = { id: number; username: string; role: string; live: boolean; must_change_password?: boolean };
+export type Me = { id: number; username: string; role: string; live: boolean; must_change_password?: boolean; pending_signups?: number };
 
 export type StageItem = {
   job_id: number; product: string; android: string; os_type: string; version: string;

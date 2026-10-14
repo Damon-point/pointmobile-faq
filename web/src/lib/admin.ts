@@ -49,8 +49,15 @@ export type ShadowResp = {
   runtime: { started_at: string; loops: Record<string, { ok: boolean; at: string; error?: string }> };
 };
 
-export type Account = { id: number; username: string; role: string; must_change: boolean; email: string; me: boolean };
-export type AccountsResp = { roles: Record<string, string>; users: Account[]; system_from: string; system_from_name: string; initial_password: string };
+export type AccountStatus = "pending" | "approved" | "rejected";
+export type Account = {
+  id: number; username: string; role: string; must_change: boolean; email: string; me: boolean;
+  status: AccountStatus; company: string; requested_at: string; decided_by: string; decided_at: string; reject_reason: string;
+};
+export type AccountsResp = {
+  roles: Record<string, string>; statuses: Record<AccountStatus, string>; users: Account[];
+  system_from: string; system_from_name: string; initial_password: string;
+};
 
 export type StaffRow = {
   id: number; name: string; email: string; status: string; is_dqa: boolean; is_handler: boolean; team: string; memo: string; updated_by?: string;

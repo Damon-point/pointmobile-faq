@@ -189,6 +189,8 @@ def user_email(user_id: int) -> str:
         if c and c.email_address:
             return c.email_address.strip()
         u = db.query(User).filter_by(id=user_id).first()
+        if u and (u.email or "").strip():          # 회원가입 때 받은 주소
+            return u.email.strip()
         uname = u.username if u else ""
     return _email_from_username(uname)
 
@@ -201,7 +203,7 @@ def _role_emails(*roles: str, exclude_username: str = "") -> list[str]:
     나가지 못했다. 중복 주소는 한 번만 남긴다.
     """
     with get_session() as db:
-        q = db.query(User.id, User.username).filter(User.role.in_(roles))
+        q = db.query(User.id, User.username).filter(User.role.in_(roles), User.status == "approved")
         if exclude_username:
             q = q.filter(User.username != exclude_username)
         rows = q.order_by(User.id).all()

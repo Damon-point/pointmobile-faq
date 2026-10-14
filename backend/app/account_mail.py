@@ -1,11 +1,8 @@
-"""계정 안내 메일 — 생성·초기화·비밀번호 찾기.
+"""계정 안내 메일 — 가입 요청 알림 · 가입 결과 · 비밀번호 초기화 · 비밀번호 찾기.
 
-아이디가 곧 회사 이메일이므로(2026-08-19 확정) 계정을 만들거나 초기화하면 그 주소로
-바로 안내가 나간다. 별도로 주소를 물어보지 않는다.
-
-셋 다 **시스템 명의**로 나간다(as_system=True) — 계정·비밀번호 안내는 사람이 아니라
-시스템이 알리는 것이고, 비밀번호 찾기는 요청자가 로그인 전이라 명의로 삼을 사람도 없다.
-답장은 Reply-To 를 따라 시스템 관리자에게 간다.
+모두 **시스템 명의**로 나간다(as_system=True) — 사람이 아니라 시스템이 알리는 것이고, 가입 신청자는
+아직 로그인 전이라 명의로 삼을 사람도 없다. 답장은 Reply-To 를 따라 시스템 관리자에게 간다.
+신청자에게 가는 메일은 가입 때 받은 이메일로 보낸다(ID 는 이메일이 아니다).
 """
 from __future__ import annotations
 
@@ -35,25 +32,58 @@ def _table(rows: list[tuple[str, str]]) -> str:
     return "\n".join(out)
 
 
-def _account_rows(username: str) -> list[tuple[str, str]]:
-    return [("서비스 주소", app_url()), ("아이디", username),
-            ("초기 비밀번호", INITIAL_PASSWORD)]
+def _email_of(username: str) -> str:
+    from app.database import get_session
+    from app.models import User
+
+    with get_session() as db:
+        u = db.query(User).filter_by(username=username).first()
+        addr = (u.email or "").strip() if u else ""
+    return addr or (username if "@" in username else "")
 
 
-def send_welcome(actor_user_id: int, username: str) -> tuple[bool, str]:
-    """새 계정 안내 — 서비스 주소·아이디·초기 비밀번호."""
+def send_signup_request(info: dict) -> tuple[bool, str]:
+    """가입 신청 — 시스템 관리자에게 승인을 요청한다."""
     from app import mail_templates as MT
 
-    subject, body = MT.render("account_welcome", 정보표=_table(_account_rows(username)))
-    return send_as_user(actor_user_id, username, subject, body, as_system=True)
+    tos = system_admin_emails()
+    sender = system_sender_user_id()
+    if not tos or sender is None:
+        return False, "관리자 주소나 발송 계정이 없어 알리지 못했습니다."
+    subject, body = MT.render(
+        "signup_request", 회사=info["company"], 아이디=info["username"],
+        계정관리주소=f"{app_url()}/settings/accounts",
+        정보표=_table([("회사", info["company"]), ("이메일", info["email"]), ("ID", info["username"]),
+                     ("신청 시각", datetime.now().strftime("%Y-%m-%d %H:%M"))]))
+    return send_as_user(sender, tos, subject, body, as_system=True)
+
+
+def send_signup_result(info: dict, approved: bool) -> tuple[bool, str]:
+    """가입 승인 · 반려 결과 — 신청자에게."""
+    from app import mail_templates as MT
+
+    sender = system_sender_user_id()
+    if sender is None or not info.get("email"):
+        return False, "발송 계정이나 신청자 주소가 없어 알리지 못했습니다."
+    if approved:
+        subject, body = MT.render("signup_approved", 정보표=_table(
+            [("서비스 주소", app_url()), ("회사", info["company"]), ("ID", info["username"])]))
+    else:
+        subject, body = MT.render("signup_rejected", 사유=info.get("reason") or "-", 정보표=_table(
+            [("회사", info["company"]), ("ID", info["username"])]))
+    return send_as_user(sender, info["email"], subject, body, as_system=True)
 
 
 def send_reset(actor_user_id: int, username: str) -> tuple[bool, str]:
-    """비밀번호 초기화 안내 — 관리자가 초기화한 직후."""
+    """비밀번호 초기화 안내 — 관리자가 초기화한 직후, 그 계정의 이메일로."""
     from app import mail_templates as MT
 
-    subject, body = MT.render("account_reset", 정보표=_table(_account_rows(username)))
-    return send_as_user(actor_user_id, username, subject, body, as_system=True)
+    to = _email_of(username)
+    if not to:
+        return False, "이 계정의 이메일이 없어 알리지 못했습니다."
+    subject, body = MT.render("account_reset", 정보표=_table(
+        [("서비스 주소", app_url()), ("아이디", username), ("초기 비밀번호", INITIAL_PASSWORD)]))
+    return send_as_user(actor_user_id, to, subject, body, as_system=True)
 
 
 def send_forgot_request(login_id: str, exists: bool) -> tuple[bool, str]:

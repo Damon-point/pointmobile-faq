@@ -13,7 +13,7 @@ const NAV = [
   { href: "/issues", label: "이슈", icon: "bug" },
   { href: "/stats", label: "통계", icon: "rounds" },
   { href: "/usage", label: "Claude 사용량", icon: "sparkle" },
-  { href: "/settings", label: "설정", icon: "gear" },
+  { href: "/settings", label: "설정", icon: "gear", count: (_o?: IssueOverview | null, m?: Me | null) => m?.pending_signups ?? 0, hot: true },
 ]
 
 const ROLE: Record<string, string> = { admin: "관리자", user: "담당자" };
@@ -21,7 +21,7 @@ const ROLE: Record<string, string> = { admin: "관리자", user: "담당자" };
 export default function Shell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
-  const me = useApi<Me>("/api/me");
+  const me = useApi<Me>("/api/me", 60_000);   // 가입 승인 대기 숫자가 따라오게
   const ov = useApi<IssueOverview>("/api/issues/overview", 30_000);
 
   async function logout() {
@@ -46,7 +46,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <nav className="flex flex-row flex-wrap gap-1 lg:flex-col">
           {NAV.map((n) => {
             const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
-            const c = n.count?.(ov.data) ?? 0;
+            const c = n.count?.(ov.data, me.data) ?? 0;     // 설정의 숫자 = 가입 승인 대기(관리자)
             return (
               <Link key={n.href} href={n.href}
                     className={cx("flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[14px] font-medium transition-colors",

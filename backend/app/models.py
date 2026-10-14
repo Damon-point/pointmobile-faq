@@ -39,6 +39,16 @@ class User(Base):
     #: 이 표시를 달고 나가고, 본인이 바꾸기 전까지 다른 화면으로 갈 수 없다.
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    #: 회원가입 — pending(승인 대기) · approved(승인) · rejected(반려). 승인된 계정만 로그인한다.
+    #: 가입 기능 전에 있던 계정은 approved 로 둔다.
+    status: Mapped[str] = mapped_column(String(20), default="approved", index=True)
+    #: 회원가입 때 받는 것 — 회사명 · 이메일(알림 · 승인 결과를 받는 곳). 로그인은 username(ID)으로 한다.
+    company: Mapped[str] = mapped_column(String(120), default="")
+    email: Mapped[str] = mapped_column(String(200), default="", index=True)
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    decided_by: Mapped[str] = mapped_column(String(80), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    reject_reason: Mapped[str] = mapped_column(Text, default="")
 
     credential: Mapped["MailCredential | None"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
