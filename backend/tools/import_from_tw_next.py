@@ -7,7 +7,7 @@
   issuetrack: 전부(이슈 · 이벤트 · 첨부 · SB 문서 · 수집 상태 · 이름표)
   usage     : 옮기지 않는다(이 프로젝트에서 새로 쌓는다)
 
-API(8170)를 멈춘 상태에서 돌린다. 원본 접속 주소는 tw-next/backend/.env 의 TWN_PG_URL.
+API(8170)를 멈춘 상태에서 돌린다. 원본 접속 주소는 tw-automation-v2/backend/.env 의 TWN_PG_URL.
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from app import models  # noqa: E402
 from app.issuetrack import db as itdb  # noqa: E402
 from app.issuetrack import models as _im  # noqa: E402,F401
 
-SRC_ENV = Path(r"C:\Users\POINTMOBILE\dev\tw-next\backend\.env")
+SRC_ENV = Path(r"C:\Users\POINTMOBILE\dev\tw-automation-v2\backend\.env")
 src_url = dotenv_values(SRC_ENV).get("TWN_PG_URL") or ""
 if not src_url:
     raise SystemExit(f"원본 TWN_PG_URL 이 없습니다 ({SRC_ENV})")
