@@ -85,6 +85,24 @@ _add(Tpl(
 ))
 
 _add(Tpl(
+    key="signup_email_code", title="회원가입 이메일 인증번호", group="계정",
+    when="회원가입 화면에서 [인증번호 받기] 를 눌렀을 때", to="가입하려는 이메일",
+    subject="[Solution Buffer] 이메일 인증번호 {{인증번호}}",
+    body=(
+        "안녕하십니까.\n"
+        "Solution Buffer 회원가입 이메일 인증번호입니다.\n"
+        "\n"
+        "    인증번호: {{인증번호}}\n"
+        "\n"
+        "회원가입 화면에 {{유효시간}} 안에 입력해 주십시오.\n"
+        "직접 요청하지 않으셨다면 이 메일은 무시하셔도 됩니다.\n"
+        "\n"
+        + _AUTO_NOTE
+    ),
+    vars={"인증번호": "6자리 숫자", "유효시간": "인증번호를 쓸 수 있는 시간 — '10분'"},
+))
+
+_add(Tpl(
     key="signup_approved", title="회원가입 승인 안내", group="계정",
     when="관리자가 가입을 승인했을 때", to="신청자",
     subject="[Solution Buffer] 회원가입이 승인되었습니다",

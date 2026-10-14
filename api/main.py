@@ -81,20 +81,73 @@ def login(body: LoginIn, request: Request):
 class SignupIn(BaseModel):
     company: str
     email: str
+    email_token: str = ""          # 이메일 인증을 마치면 받는 확인 토큰
     username: str
     password: str
     password2: str
 
 
+class EmailIn(BaseModel):
+    email: str
+
+
+class EmailCodeIn(BaseModel):
+    email: str
+    code: str
+
+
+@app.get("/api/signup/check")
+def signup_check(username: str = "", email: str = ""):
+    """ID · 이메일 중복 확인 — 준 것만 확인한다."""
+    from app import signup_verify as V
+
+    out = {}
+    if username:
+        ok, msg = V.id_status(username)
+        out["username"] = {"ok": ok, "message": msg}
+    if email:
+        ok, msg = V.email_status(email)
+        out["email"] = {"ok": ok, "message": msg}
+    return out
+
+
+@app.post("/api/signup/email-code")
+def signup_email_code(body: EmailIn):
+    """인증번호를 메일로 보낸다(60초 간격 · 한 시간 5번). 검증 모드면 보내지 않고 기록만 한다."""
+    from app import signup_verify as V
+
+    ok, msg = V.send_code(body.email)
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"ok": True, "message": msg, "ttl": int(V.CODE_TTL.total_seconds()), "resend": int(V.RESEND_GAP.total_seconds())}
+
+
+@app.post("/api/signup/email-verify")
+def signup_email_verify(body: EmailCodeIn):
+    from app import signup_verify as V
+
+    ok, msg, token = V.verify_code(body.email, body.code)
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"ok": True, "message": msg, "token": token}
+
+
 @app.post("/api/signup")
 def signup(body: SignupIn):
-    """회원가입 신청 — 승인 대기 계정을 만들고 시스템 관리자에게 알린다(검증 모드면 기록만)."""
+    """회원가입 신청 — 이메일 인증 · ID/이메일 중복을 확인하고 승인 대기 계정을 만든 뒤 관리자에게 알린다."""
     from app import accounts
+    from app import signup_verify as V
     from app.account_mail import send_signup_request
 
+    if not V.token_valid(body.email, body.email_token):
+        raise HTTPException(400, "이메일 인증을 먼저 마치세요(인증 후 30분 안에 신청해야 합니다)")
+    e_ok, e_msg = V.email_status(body.email)
+    if not e_ok:
+        raise HTTPException(400, e_msg)
     ok, msg, _uid = accounts.request_signup(body.company, body.email, body.username, body.password, body.password2)
     if not ok:
         raise HTTPException(400, msg)
+    V.consume_token(body.email)
     sent, why = send_signup_request({"company": body.company.strip(), "email": body.email.strip(),
                                      "username": body.username.strip()})
     if not sent:

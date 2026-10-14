@@ -175,3 +175,23 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text, default="")
     updated_by: Mapped[str] = mapped_column(String(80), default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class SignupEmailCode(Base):
+    """회원가입 이메일 인증 — 주소마다 한 줄. 인증번호는 원문을 두지 않고 해시만 둔다.
+
+    인증에 성공하면 짧게 쓰는 확인 토큰(token_hash)을 발급하고, 가입 신청이 그 토큰을 내야 통과한다.
+    재발송 · 시도 횟수 제한에 쓰는 시각과 횟수도 여기 둔다.
+    """
+
+    __tablename__ = "signup_email_codes"
+
+    email: Mapped[str] = mapped_column(String(200), primary_key=True)   # 소문자로 맞춘 주소
+    code_hash: Mapped[str] = mapped_column(String(128), default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sent_count: Mapped[int] = mapped_column(Integer, default=0)            # 한 시간 창 안의 발송 수
+    window_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    token_hash: Mapped[str] = mapped_column(String(128), default="")
