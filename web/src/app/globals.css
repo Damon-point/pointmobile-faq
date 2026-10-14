@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Pretendard Variable";
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url("/fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+
+/* 색은 전부 토큰 — 다크 모드는 토큰만 바꾼다 */
+:root {
+  --bg: #f4f5f8;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --line: #e4e6eb;
+  --line-strong: #cfd3db;
+  --text: #15181e;
+  --text-2: #4b5160;
+  --text-3: #8a90a0;
+  --brand: #2f6bff;
+  --brand-ink: #1d4ed8;
+  --brand-soft: #e8efff;
+  --ok: #16a34a;
+  --ok-soft: #e6f6ec;
+  --warn: #c2410c;
+  --warn-soft: #fff1e6;
+  --err: #dc2626;
+  --err-soft: #fdeaea;
+  --info: #2563eb;
+  --info-soft: #e8efff;
+  --muted-soft: #eef0f3;
+  /* 사이드바 — 라이트는 흰 바탕, 다크는 짙은 남색 */
+  --side: #ffffff;
+  --side-line: #e4e6eb;
+  --side-text: #4b5160;
+  --side-dim: #8a90a0;
+  --side-strong: #15181e;
+  --side-hover: #f1f3f7;
+  --side-active: #e8efff;
+  --side-active-text: #1d4ed8;
+  --side-chip: #e9ecf2;
+  --side-chip-text: #15181e;
+  --side-seg: #ffffff;
+}
+
+/* 테마 — <html data-theme="light|dark">. 없으면 시스템 설정을 따른다(사이드바 아래 전환, localStorage twn-theme) */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #0e1117;
+    --surface: #161a23;
+    --surface-2: #1b2029;
+    --line: #262c38;
+    --line-strong: #343c4b;
+    --text: #e8eaf0;
+    --text-2: #b3b9c7;
+    --text-3: #7d8494;
+    --brand: #5b8cff;
+    --brand-ink: #86a8ff;
+    --brand-soft: #1b2742;
+    --ok-soft: #12301f;
+    --warn: #fb923c;
+    --warn-soft: #3a2410;
+    --err-soft: #3b1717;
+    --info-soft: #1b2742;
+    --muted-soft: #222835;
+    --side: #0a0d14;
+    --side-line: #161c2a;
+    --side-text: #c7cbd6;
+    --side-dim: #7c8294;
+    --side-strong: #ffffff;
+    --side-hover: #161c2a;
+    --side-active: #1b2336;
+    --side-active-text: #ffffff;
+    --side-chip: #2a3450;
+    --side-chip-text: #ffffff;
+    --side-seg: #2a3450;
+  
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e1117;
+    --surface: #161a23;
+    --surface-2: #1b2029;
+    --line: #262c38;
+    --line-strong: #343c4b;
+    --text: #e8eaf0;
+    --text-2: #b3b9c7;
+    --text-3: #7d8494;
+    --brand: #5b8cff;
+    --brand-ink: #86a8ff;
+    --brand-soft: #1b2742;
+    --ok-soft: #12301f;
+    --warn: #fb923c;
+    --warn-soft: #3a2410;
+    --err-soft: #3b1717;
+    --info-soft: #1b2742;
+    --muted-soft: #222835;
+    --side: #0a0d14;
+    --side-line: #161c2a;
+    --side-text: #c7cbd6;
+    --side-dim: #7c8294;
+    --side-strong: #ffffff;
+    --side-hover: #161c2a;
+    --side-active: #1b2336;
+    --side-active-text: #ffffff;
+    --side-chip: #2a3450;
+    --side-chip-text: #ffffff;
+    --side-seg: #2a3450;
+  
+  }
+}
+
+/* dark: 도 같은 규칙을 따른다 */
+@custom-variant dark {
+  &:where([data-theme="dark"], [data-theme="dark"] *) { @slot; }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) { @slot; }
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-err: var(--err);
+  --color-err-soft: var(--err-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-muted-soft: var(--muted-soft);
+  --color-side: var(--side);
+  --color-side-text: var(--side-text);
+  --color-side-dim: var(--side-dim);
+  --color-side-active: var(--side-active);
+  --color-side-line: var(--side-line);
+  --color-side-strong: var(--side-strong);
+  --color-side-hover: var(--side-hover);
+  --color-side-active-text: var(--side-active-text);
+  --color-side-chip: var(--side-chip);
+  --color-side-chip-text: var(--side-chip-text);
+  --color-side-seg: var(--side-seg);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+}
+
+html { font-size: 15px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 1;
+}
+::selection { background: var(--brand-soft); }
+
+@keyframes pulse-dot { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
+.pulse-dot { animation: pulse-dot 1.2s infinite; }

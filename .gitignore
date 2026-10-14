@@ -1,0 +1,14 @@
+# 비밀 값
+.env
+backend/.env
+# 실행물
+backend/.venv/
+web/node_modules/
+web/.next/
+web/tsconfig.tsbuildinfo
+logs/
+backend/work/
+backend/*.db
+backend/*.db-*
+__pycache__/
+*.pyc
