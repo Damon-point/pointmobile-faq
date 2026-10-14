@@ -1,4 +1,4 @@
-# Solution Buffer (sb-next)
+# Solution Buffer (pointmobile-faq)
 
 Redmine salesissue 를 수집하고, Resolved 된 이슈를 고객용 문서(SB) 초안으로 만들어 담당자가 검토한 뒤
 Confluence SB 스페이스에 올리는 앱. tw-next(3080)의 Solution Buffer 메뉴를 떼어 낸 독립 프로젝트다.

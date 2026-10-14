@@ -39,7 +39,7 @@ from common import user as _user  # noqa: E402
 
 SECRET = os.getenv("SBN_SECRET", "")
 if not SECRET:
-    raise SystemExit("SBN_SECRET 가 .env 에 없습니다 (sb-next/.env)")
+    raise SystemExit("SBN_SECRET 가 .env 에 없습니다 (pointmobile-faq/.env)")
 
 
 @asynccontextmanager
