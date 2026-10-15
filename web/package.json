@@ -6,22 +6,36 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:schema": "node --env-file=.env.local --import tsx scripts/apply-schema.mts",
+    "db:migrate": "node --env-file=.env.local --import tsx scripts/migrate-from-sbnext.mts",
+    "db:check": "node --env-file=.env.local --import tsx scripts/check-migration.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.134.0",
+    "bcryptjs": "^3.0.3",
+    "jose": "^6.2.12",
+    "next": "15.5.4",
+    "nodemailer": "^10.1.1",
+    "postgres": "^3.4.9",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.4"
+    "sanitize-html": "^2.18.1",
+    "textile-js": "^2.1.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "@types/sanitize-html": "^2.16.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.4",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5"
   }
 }

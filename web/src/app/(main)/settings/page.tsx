@@ -51,8 +51,7 @@ export default function SettingsHome() {
           <Tile href="/settings/mail" title="메일 발송" ok={!!s.sender.system_from || s.sender.has_password} okText="사용 중">
             <div className="truncate">{s.sender.system_from_name} &lt;{s.sender.system_from || s.sender.email}&gt;</div>
           </Tile>
-          <Tile href="/settings/claude" title="Claude 호출" ok={s.claude.backend === "subscription" ? !!s.claude.claude : s.claude.has_key}
-                okText={s.claude.backend === "subscription" ? "구독" : "API 열쇠"} noText="쓸 수 없음" />
+          <Tile href="/settings/claude" title="Claude 호출" ok={s.claude.has_key} okText="API 키" noText="키 없음" />
         </div>
       </div>
 

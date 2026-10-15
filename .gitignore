@@ -1,6 +1,8 @@
 # 비밀 값
 .env
 backend/.env
+.env*.local
+web/.env*.local
 # 실행물
 backend/.venv/
 web/node_modules/

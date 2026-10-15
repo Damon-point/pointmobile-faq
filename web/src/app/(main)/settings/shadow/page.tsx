@@ -90,7 +90,7 @@ export default function ShadowPage() {
             );
           })}
         </div>
-        {data.runtime.started_at && <div className="mt-2 text-[12px] text-ink-3">API 기동 {data.runtime.started_at}</div>}
+        {data.runtime.started_at && <div className="mt-2 text-[12px] text-ink-3">마지막 주기 작업 {data.runtime.started_at}</div>}
       </Section>
 
       <Section title="막아 둔 쓰기" desc="최근 것부터. 줄을 누르면 보내려던 내용 전체가 보입니다."

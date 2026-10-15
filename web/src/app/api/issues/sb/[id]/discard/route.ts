@@ -1,0 +1,16 @@
+import { bad, body, paramInt, route } from "@/server/http";
+import { requireUser } from "@/server/session";
+import { loadDocFor } from "@/server/issuetrack/api";
+import * as SB from "@/server/issuetrack/sb";
+
+export const dynamic = "force-dynamic";
+
+export const POST = route(async (req, ctx) => {
+  const u = await requireUser();
+  const id = await paramInt(ctx, "id");
+  await loadDocFor(u, id);
+  const b = await body<{ reason: string }>(req);
+  const res = await SB.discard(id, u.username || "", String(b.reason ?? "").trim());
+  if (!res.ok) bad(res.error || "실패", 409);
+  return { ok: true, message: "폐기했습니다" };
+});

@@ -1,42 +1,50 @@
-﻿# Solution Buffer 를 콘솔 창 없이 띄운다 — API(8170, 이 PC 안에서만) + 화면(3070, 사내망).
-# tw-next(3080/8180) 와 따로 돈다. 같은 로컬 PostgreSQL(127.0.0.1:5432)의 다른 DB(sbnext)를 쓴다.
+﻿# Solution Buffer 를 이 PC 에서 띄운다(사내망 3070) — 웹에 올리기 전 · 올린 뒤 비교용.
+# 화면과 API 가 한 Next.js 앱이다(web/). 설정은 web\.env.local, DB 는 DATABASE_URL(로컬 PostgreSQL 또는 Supabase).
+# 5분 주기 작업은 Vercel Cron 이 부른다. 이 PC 에서 띄운 경우에는 아래 반복 작업이 대신 부른다.
 $root = Split-Path -Parent $PSScriptRoot
-$py = Join-Path $root "backend\.venv\Scripts\python.exe"
+$web = Join-Path $root "web"
 $logs = Join-Path $root "logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
 
-foreach ($port in 8170, 3070) {
-    $p = (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
-    if ($p) { Stop-Process -Id $p -Force }
-}
-$env:PYTHONIOENCODING = "utf-8"
+$p = (Get-NetTCPConnection -LocalPort 3070 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess
+if ($p) { Stop-Process -Id $p -Force }
 
-# 로컬 PostgreSQL — 꺼져 있으면 먼저 켠다(tw-next 와 같은 서버). 3070 을 다시 띄워도 끄지 않는다.
-$pgBin = "C:\Users\POINTMOBILE\pgsql\bin"
-$pgData = "C:\Users\POINTMOBILE\pgdata\twnext"
-if (-not (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue)) {
-    Start-Process -FilePath (Join-Path $pgBin "pg_ctl.exe") -ArgumentList "-D `"$pgData`" -l `"$pgData\startup.log`" start" -WindowStyle Hidden
-    for ($i = 0; $i -lt 30 -and -not (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue); $i++) { Start-Sleep -Milliseconds 500 }
-    if (-not (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue)) { throw "PostgreSQL 이 켜지지 않았습니다 — $pgData\log 를 보세요" }
+# DATABASE_URL 이 로컬 PostgreSQL(127.0.0.1)이면, 꺼져 있을 때 먼저 켜고 접속을 받을 때까지 기다린다.
+$envFile = Join-Path $web ".env.local"
+if (-not (Test-Path $envFile)) { throw "web\.env.local 이 없습니다 — web\.env.example 을 보고 만드세요" }
+$dbUrl = (Get-Content $envFile | Where-Object { $_ -like "DATABASE_URL=*" } | Select-Object -First 1) -replace "^DATABASE_URL=", ""
+if ($dbUrl -match "@(127\.0\.0\.1|localhost):5432/") {
+    $pgBin = "C:\Users\POINTMOBILE\pgsql\bin"
+    $pgData = "C:\Users\POINTMOBILE\pgdata\twnext"
+    if (-not (Get-NetTCPConnection -LocalPort 5432 -State Listen -ErrorAction SilentlyContinue)) {
+        Start-Process -FilePath (Join-Path $pgBin "pg_ctl.exe") -ArgumentList "-D `"$pgData`" -l `"$pgData\startup.log`" start" -WindowStyle Hidden
+    }
+    for ($i = 0; $i -lt 120; $i++) {
+        & (Join-Path $pgBin "pg_isready.exe") -h 127.0.0.1 -p 5432 -q
+        if ($LASTEXITCODE -eq 0) { break }
+        Start-Sleep -Seconds 1
+    }
+    if ($LASTEXITCODE -ne 0) { throw "PostgreSQL 이 접속을 받지 않습니다 — $pgData\log 를 보세요" }
 }
-# 포트가 열려도 PC 가 갑자기 꺼진 뒤라면 복구하는 동안 접속을 거부한다("database system is starting up").
-# 접속을 받을 때까지(최대 2분) 기다린 뒤 API 를 띄운다 — 2026-10-15 재부팅 뒤 API 가 이것 때문에 죽었다.
-for ($i = 0; $i -lt 120; $i++) {
-    & (Join-Path $pgBin "pg_isready.exe") -h 127.0.0.1 -p 5432 -q
-    if ($LASTEXITCODE -eq 0) { break }
-    Start-Sleep -Seconds 1
-}
-if ($LASTEXITCODE -ne 0) { throw "PostgreSQL 이 접속을 받지 않습니다 — $pgData\log 를 보세요" }
 
-Start-Process -FilePath $py -ArgumentList "-X utf8 -m uvicorn main:app --host 127.0.0.1 --port 8170" `
-    -WorkingDirectory (Join-Path $root "api") -WindowStyle Hidden `
-    -RedirectStandardOutput (Join-Path $logs "api.out.log") -RedirectStandardError (Join-Path $logs "api.err.log")
-
-$web = Join-Path $root "web"
 if (-not (Test-Path (Join-Path $web ".next\BUILD_ID"))) {
     Push-Location $web; npx next build; Pop-Location
 }
 Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx next start -p 3070 -H 0.0.0.0" `
     -WorkingDirectory $web -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $logs "web.out.log") -RedirectStandardError (Join-Path $logs "web.err.log")
+
+# 5분마다 주기 작업(Redmine 수집 → SB 초안 → 검토 요청)을 부른다 — Vercel Cron 과 같은 일.
+# 다시 띄울 때마다 반복 작업이 하나씩 쌓이지 않게, 전에 띄운 것을 먼저 끈다.
+$tickPid = Join-Path $logs "tick.pid"
+if (Test-Path $tickPid) {
+    Stop-Process -Id ([int](Get-Content $tickPid)) -Force -ErrorAction SilentlyContinue
+    Remove-Item $tickPid -Force
+}
+$cronSecret = (Get-Content $envFile | Where-Object { $_ -like "CRON_SECRET=*" } | Select-Object -First 1) -replace "^CRON_SECRET=", ""
+if ($cronSecret) {
+    $tick = "while(`$true){ Start-Sleep -Seconds 300; try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 310 -Headers @{Authorization='Bearer $cronSecret'} http://127.0.0.1:3070/api/cron/tick | Out-Null } catch {} }"
+    $tp = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -WindowStyle Hidden -Command $tick" -WindowStyle Hidden -PassThru
+    Set-Content -Path $tickPid -Value $tp.Id
+}
 "started: http://192.168.121.35:3070"

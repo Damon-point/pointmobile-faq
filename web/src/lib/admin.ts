@@ -22,7 +22,7 @@ export type SettingsOverview = {
     email: string; has_password: boolean;
   };
   web: CredRow[];
-  claude: { backend: "subscription" | "api"; claude: string; has_key: boolean };
+  claude: { backend: "api"; claude: string; has_key: boolean; model?: string };
   sb: {
     sb_auto_notify: boolean; sb_assignees: string; exclude_keywords: string; sb_auto_generate: boolean; sb_per_tick: number;
     missing_accounts: { name: string; count: number }[];
