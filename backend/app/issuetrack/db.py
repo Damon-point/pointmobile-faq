@@ -1,10 +1,8 @@
-"""이슈 트래킹 **전용** DB — tw_app.db 와 물리적으로 분리(issuetrack.db).
+"""이슈 트래킹 **전용** DB — PostgreSQL 의 issuetrack 스키마(설정이 없으면 SQLite issuetrack.db).
 
-license/whitelist 모듈과 같은 방식이다. 별도 엔진·메타데이터를 쓰므로 이 테이블들이
-tw_app.db 에 생기지 않고, 반대도 마찬가지다.
-
-수집량이 큰 편이라(이슈 1,600여 건 + 이벤트 6,000여 건, 이후 계속 증가) 메일·작업
-DB 와 섞지 않는 편이 백업·초기화 모두 안전하다.
+별도 엔진·메타데이터를 쓰므로 이 테이블들이 계정 · 설정 쪽(public)에 생기지 않고, 반대도 마찬가지다.
+수집량이 큰 편이라(이슈 1,600여 건 + 이벤트 6,000여 건, 이후 계속 증가) 나눠 두는 편이
+백업·초기화 모두 안전하다.
 """
 from __future__ import annotations
 
@@ -66,6 +64,10 @@ def _ensure_columns() -> None:
         for name, ddl in cols:
             if name not in existing:
                 stmts.append(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+    if "rm_sb_docs" in have:
+        # Confluence 업로드를 없앴다(2026-10-15). 예전에 '업로드 완료'였던 문서는 '확정'으로 본다.
+        # 옛 컬럼(template_id · labels_json · confluence_* · uploaded_at)은 값이 남아 있어 지우지 않는다.
+        stmts.append("UPDATE rm_sb_docs SET state = 'approved' WHERE state = 'uploaded'")
     if stmts:
         with issuetrack_engine.begin() as conn:
             for sql in stmts:

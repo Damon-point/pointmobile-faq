@@ -58,12 +58,6 @@ def is_business_day(d: date) -> bool:
     return d.weekday() < 5 and d not in _holidays
 
 
-def holidays_in(a: date, b: date) -> list[date]:
-    """[a, b] 안의 공휴일(주말 제외). 화면에서 '무슨 날이 빠졌나' 보여줄 때 쓴다."""
-    _load()
-    return sorted(d for d in _holidays if a <= d <= b and d.weekday() < 5)
-
-
 def count_days(a: date, b: date) -> int:
     """(a, b] 구간의 업무일 수. a 는 빼고 b 는 넣는다."""
     _load()

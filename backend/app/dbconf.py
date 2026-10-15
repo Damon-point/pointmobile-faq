@@ -3,8 +3,6 @@
 Solution Buffer 는 이 PC 의 PostgreSQL(127.0.0.1:5432, DB sbnext)을 쓴다. 접속 주소는 backend/.env 의
 TWN_PG_URL. 같은 DB 안에 스키마를 나눈다 — public(계정 · 자격증명 · 인원 · 설정) · issuetrack(이슈 · SB 문서) · usage.
 엔진마다 search_path 를 자기 스키마로 잡아 두므로 모델·SQL 은 테이블 이름 그대로 쓴다.
-
-외부 FOTA DB 는 이 프로젝트와 무관하다 — 접속하지 않는다.
 """
 from __future__ import annotations
 
@@ -23,10 +21,6 @@ _BUSY_TIMEOUT_MS = 8000
 
 def pg_url() -> str:
     return (os.getenv("TWN_PG_URL") or "").strip()
-
-
-def is_pg() -> bool:
-    return bool(pg_url())
 
 
 def make_engine(schema: str, sqlite_path: Path, *, wal: bool = True) -> Engine:

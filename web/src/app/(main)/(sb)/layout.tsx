@@ -59,7 +59,7 @@ function Head() {
     <>
       <PageHead
         title="Solution Buffer"
-        lead="Redmine salesissue 를 5분마다 수집하고, Resolved 된 이슈를 SB 문서 초안으로 만든다. Confluence 업로드는 사람이 누를 때만."
+        lead="Redmine salesissue 를 5분마다 수집하고, Resolved 된 이슈를 SB 문서 초안으로 만든다. 담당자가 검토하고 확정한다."
         right={
           <div className="flex items-center gap-3">
             {s && (

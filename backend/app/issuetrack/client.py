@@ -105,9 +105,6 @@ class RedmineClient:
         raise RedmineError(str(last))
 
     # ---- 조회 -------------------------------------------------------------
-    def whoami(self) -> dict:
-        return (self._get("/users/current.json") or {}).get("user") or {}
-
     def iter_issues(
         self,
         *,

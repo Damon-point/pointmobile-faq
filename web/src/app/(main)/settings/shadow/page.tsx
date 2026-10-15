@@ -6,13 +6,10 @@ import { Empty, Skeleton, Tag, cx } from "@/components/ui";
 import { useApi, type Me } from "@/lib/api";
 import { errText, send, type ShadowResp, type ShadowWrite } from "@/lib/admin";
 
-const SYSTEM: Record<string, string> = {
-  mail: "메일", dropbox: "Dropbox", fileserver: "파일 서버", fota_web: "FOTA 웹", fota_whitelist: "FOTA WhiteList",
-  fota_db: "FOTA DB", service_portal: "Service Portal", confluence: "Confluence", sb_confluence: "SB Confluence",
-  mailchimp: "Mailchimp", system: "운영 전환",
-};
+// sb_confluence 는 Confluence 업로드를 없애기 전(2026-10-15)에 남은 기록을 읽으려고 둔다.
+const SYSTEM: Record<string, string> = { mail: "메일", sb_confluence: "SB Confluence(옛 기록)", system: "운영 전환" };
 
-const LOOP: Record<string, string> = { mail_sync: "메일 동기화 · 알림", whitelist_poll: "WhiteList 메일 판별", redmine_sb: "Redmine · Solution Buffer" };
+const LOOP: Record<string, string> = { redmine_sb: "Redmine · Solution Buffer" };
 
 const PHRASE = "운영 전환";
 
@@ -22,7 +19,7 @@ function headline(w: ShadowWrite): string {
     const to = Array.isArray(w.to) ? (w.to as string[]).join(", ") : v("to");
     return `${v("subject")} → ${to}`;
   }
-  return v("title") || v("subject") || v("path") || v("rel") || v("name") || v("page_id") || v("download_id") || v("campaign_id") || v("by") || "";
+  return v("title") || v("subject") || v("path") || v("by") || "";
 }
 
 export default function ShadowPage() {
@@ -65,7 +62,7 @@ export default function ShadowPage() {
   return (
     <>
       <Section title="운영 상태"
-               desc="8080 과 같은 Dropbox·FOTA·Portal·Confluence·메일을 함께 쓰므로, 검증 모드에서는 외부로 나가는 쓰기를 마지막 단계에서 막고 무엇을 보내려 했는지만 남깁니다."
+               desc="tw-next(3080) · tw-automation(8080) 과 같은 메일 계정을 함께 쓰므로, 검증 모드에서는 메일 발송을 마지막 단계에서 막고 무엇을 보내려 했는지만 남깁니다."
                right={isAdmin && (live
                  ? <Button variant="outline" busy={busy} onClick={() => switchMode(false)}>검증 모드로 돌리기</Button>
                  : <Button variant="danger" onClick={() => setToggle(true)}>운영 전환…</Button>)}>
@@ -77,7 +74,7 @@ export default function ShadowPage() {
           </span>
           <span className="text-[13px] text-ink-3">막아 둔 쓰기 {writes.length}건</span>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {Object.entries(LOOP).map(([k, label]) => {
             const l = data.runtime.loops[k];
             return (
@@ -148,9 +145,9 @@ export default function ShadowPage() {
                <Button variant="danger" busy={busy} disabled={typed.trim() !== PHRASE} onClick={() => switchMode(true)}>전환</Button>
              </>}>
         <div className="space-y-3 text-[14px] text-ink-2">
-          <p>전환하면 3080 이 메일을 실제로 보내고, Dropbox·파일 서버·FOTA·Service Portal·Confluence·Mailchimp 에 실제로 씁니다.
-            8080 에서 같은 작업을 돌리고 있으면 두 번 올라가거나 메일이 두 번 나갑니다.</p>
-          <p>메일 동기화 · WhiteList 판별 · Solution Buffer 알림처럼 사람이 누르지 않아도 도는 작업도 그 순간부터 실제로 보냅니다.</p>
+          <p>전환하면 이 앱이 메일(SB 검토 요청 · 회원가입 인증번호 · 계정 알림)을 실제로 보냅니다.
+            tw-next · tw-automation 에서 같은 알림을 돌리고 있으면 메일이 두 번 나갑니다.</p>
+          <p>Solution Buffer 검토 요청처럼 사람이 누르지 않아도 도는 작업도 그 순간부터 실제로 보냅니다.</p>
           <label className="block">
             <span className="mb-1 block text-[12.5px] font-semibold">아래 칸에 <b className="text-err">{PHRASE}</b> 를 입력하세요</span>
             <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={PHRASE} autoFocus />

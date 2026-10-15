@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """검증 모드 — 운영 전환 전까지 외부 시스템에 쓰지 않는다.
 
-Solution Buffer 는 Confluence(SB 스페이스)에 문서를 올리고 담당자에게 메일을 보낸다. 같은 Redmine ·
-Confluence · 메일 계정을 tw-next(3080) · tw-automation(8080) 과 함께 쓰므로, 검증 중에 실제로 쓰면
-같은 문서가 두 번 올라가거나 같은 메일이 두 번 나간다. 그래서 외부에 쓰는 **마지막 함수**에서 이 모듈에
+Solution Buffer 는 담당자에게 메일을 보낸다. 같은 메일 계정을 tw-next(3080) · tw-automation(8080) 과
+함께 쓰므로, 검증 중에 실제로 쓰면 같은 메일이 두 번 나간다. 그래서 외부에 쓰는 **마지막 함수**에서 이 모듈에
 묻고, 검증 모드면 보내려던 것만 work/shadow_writes.jsonl 에 남기고 성공한 것처럼 돌려준다.
 
 운영 전환은 설정(app_settings 'live_writes')에서 한다.

@@ -1,14 +1,13 @@
 """
-관리 · 설정 — 메일 발송 계정 · Redmine/Confluence 로그인 · Claude · SB 동작 · 계정 · 인원 명부 · 메일 문구 · 사용량.
+관리 · 설정 — 메일 발송 계정 · Redmine 로그인 · Claude · SB 동작 · 계정 · 인원 명부 · 메일 문구 · 사용량.
 
 tw-next 의 api/routers/admin.py 에서 Solution Buffer 에 필요한 것만 옮겼다.
 비밀번호 값은 화면으로 내보내지 않는다 — '설정됨' 여부와 갱신 시각만 준다. 바꿀 때만 새 값을 받는다.
-공용 웹 자격증명(Redmine · Confluence)은 공용 계정(admin) 행에 저장한다.
+공용 웹 자격증명(Redmine)은 공용 계정(admin) 행에 저장한다.
 """
 from __future__ import annotations
 
 import os
-import re
 import time
 
 from fastapi import APIRouter, HTTPException, Request
@@ -23,23 +22,10 @@ router = APIRouter(prefix="/api/admin")
 
 # 메일 서버 — 발송(SMTP) 호스트도 여기서 정한다(user_mailer._smtp_host_for). tw-next 와 같은 값
 _MAIL_SERVER = os.getenv("MAIL_SERVER", "mail.pointmobile.com")
-_MAIL_PORT = int(os.getenv("MAIL_POP_PORT", "995") or "995")
 
-# 웹 로그인 대상 — SB 가 쓰는 둘(값은 tw-next 와 같다)
+# 웹 로그인 대상 — SB 가 쓰는 것(값은 tw-next 와 같다)
 _WEB_FIXED: dict[str, dict] = {
-    "redmine": {
-        "label": "Redmine (사내 이슈)", "base_url": "https://issue.pointmobile.co.kr",
-        "login_url": "https://issue.pointmobile.co.kr/login",
-        "user_sel": "#username", "pw_sel": "#password", "submit_sel": "#login-submit",
-        "edit_tpl": "", "iframe_sel": "", "save_sel": "",
-    },
-    "release_notes": {
-        "label": "Confluence (SB 스페이스)",
-        "base_url": "http://post.solution-pointmobile.co.kr:8040", "login_url": "",
-        "user_sel": "#os_username", "pw_sel": "#os_password", "submit_sel": "#loginButton",
-        "edit_tpl": "{base}/pages/editpage.action?pageId={page_id}",
-        "iframe_sel": "#wysiwygTextarea_ifr", "save_sel": "#rte-button-publish",
-    },
+    "redmine": {"label": "Redmine (사내 이슈)", "base_url": "https://issue.pointmobile.co.kr"},
 }
 
 
@@ -135,7 +121,7 @@ def save_smtp(body: MailAccountIn, request: Request):
             row = MailCredential(user_id=u["id"], encrypted_password="")
             db.add(row)
         row.email_address = email
-        row.pop_server, row.pop_port, row.use_ssl = _MAIL_SERVER, _MAIL_PORT, True
+        row.pop_server = _MAIL_SERVER
         if body.password:
             row.encrypted_password = encrypt_secret(body.password)
         db.commit()
@@ -172,7 +158,7 @@ def test_smtp(body: MailAccountIn, request: Request):
         return {"ok": False, "message": f"로그인 실패: {e}"}
 
 
-# ── Redmine · Confluence 로그인 ─────────────────────────────────────────────────────
+# ── Redmine 로그인 ─────────────────────────────────────────────────────
 
 class LoginCredIn(BaseModel):
     username: str
@@ -195,10 +181,8 @@ def save_web(target: str, body: LoginCredIn, request: Request):
                 _bad("최초 등록 시 비밀번호가 필요합니다")
             row = WebCredential(user_id=sid, target=target)
             db.add(row)
-        row.base_url, row.login_url = cfg["base_url"], cfg["login_url"]
+        row.base_url = cfg["base_url"]
         row.username = body.username.strip()
-        row.username_sel, row.password_sel, row.submit_sel = cfg["user_sel"], cfg["pw_sel"], cfg["submit_sel"]
-        row.edit_url_template, row.editor_iframe_sel, row.save_button_sel = cfg["edit_tpl"], cfg["iframe_sel"], cfg["save_sel"]
         if body.password:
             row.encrypted_password = encrypt_secret(body.password)
         db.commit()
@@ -371,8 +355,6 @@ class StaffIn(BaseModel):
     email: str = ""
     team: str = ""
     status: str = ""
-    is_dqa: bool = False
-    is_handler: bool = False
     memo: str = ""
 
 
@@ -382,7 +364,7 @@ def staff_save(body: StaffIn, request: Request):
     from app import staff as ST
 
     ok, msg = ST.save_staff(id=body.id, name=body.name, email=body.email, status=body.status or ST.ACTIVE,
-                            is_dqa=body.is_dqa, is_handler=body.is_handler, team=body.team, memo=body.memo,
+                            team=body.team, memo=body.memo,
                             by=u["username"])
     if not ok:
         _bad(msg)

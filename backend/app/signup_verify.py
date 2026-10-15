@@ -101,7 +101,7 @@ def send_code(email: str) -> tuple[bool, str]:
     if sender is None:
         return False, "메일 발송 계정이 설정되지 않아 보낼 수 없습니다"
     subject, body = MT.render("signup_email_code", 인증번호=code, 유효시간=f"{int(CODE_TTL.total_seconds() // 60)}분")
-    sent, err = send_as_user(sender, e, subject, body, as_system=True)
+    sent, err = send_as_user(sender, e, subject, body)
     if not sent:
         return False, f"인증 메일을 보내지 못했습니다 — {err}"
     return True, f"{e} 로 인증번호를 보냈습니다. {int(CODE_TTL.total_seconds() // 60)}분 안에 입력하세요"

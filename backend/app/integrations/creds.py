@@ -1,4 +1,4 @@
-"""공용 웹 자격증명(Redmine · Confluence)을 복호화해 쓸 수 있는 형태로 돌려준다."""
+"""공용 웹 자격증명(Redmine)을 복호화해 쓸 수 있는 형태로 돌려준다."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from app.database import get_session
 from app.models import WebCredential
 from app.security import decrypt_secret
 
-# 공용 자격증명(Redmine · Confluence)은
+# 공용 자격증명(Redmine)은
 # **admin 계정 한 곳**에 등록해 팀 전체가 공유한다. 예외는 개인 메일 발송 계정뿐
 # (그건 user_mailer 가 각 사용자 계정으로 보낸다 — 여기 getter 들은 그 계정을 다루지 않는다).
 _ADMIN_CRED_UID: int | None = None
@@ -31,15 +31,8 @@ def credential_user_id() -> int:
 class WebConfig:
     target: str
     base_url: str
-    login_url: str
     username: str
     password: str
-    edit_url_template: str
-    editor_iframe_sel: str
-    save_button_sel: str
-    username_sel: str
-    password_sel: str
-    submit_sel: str
 
 
 def get_web_config(user_id: int, target: str) -> "WebConfig | None":
@@ -51,13 +44,6 @@ def get_web_config(user_id: int, target: str) -> "WebConfig | None":
         return WebConfig(
             target=c.target,
             base_url=c.base_url,
-            login_url=c.login_url or c.base_url,
             username=c.username,
             password=decrypt_secret(c.encrypted_password) if c.encrypted_password else "",
-            edit_url_template=c.edit_url_template,
-            editor_iframe_sel=c.editor_iframe_sel,
-            save_button_sel=c.save_button_sel,
-            username_sel=c.username_sel,
-            password_sel=c.password_sel,
-            submit_sel=c.submit_sel,
         )

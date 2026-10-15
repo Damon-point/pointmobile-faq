@@ -8,16 +8,14 @@
                  한 번에 받아 SBDoc 에 저장한다.
   3. notify()    **초안이 만들어진 그 자리에서** 담당자에게 메일을 보낸다.
                  이게 이 기능의 본줄기다 — 이슈가 Resolved 되면 담당자가 메일을
-                 받고, 로그인해서 [Solution Buffer] 탭에서 고치거나 올린다.
-                 여기서는 **아무것도 업로드하지 않는다** — Confluence 반영은
-                 담당자가 화면에서 [업로드]를 눌러야 일어난다.
+                 받고, 로그인해서 [SB 문서] 화면에서 고친 뒤 확정한다.
+  4. approve()   담당자가 내용을 확정한다(approved). 확정된 문서가 SB 의 결과물이다.
 
 **과거분을 자동으로 돌리지 않는 이유**: 감시를 켠 시점에 이미 Resolved 인 이슈가
 666건이다. 문서 1건에 약 $0.10 이므로 무심코 전부 돌리면 $60 이상이 한 번에 나간다.
 소급은 사람이 건수를 보고 결정할 일이라 backlog 로 남겨 둔다.
 
-읽기 전용 원칙: Redmine 에는 아무것도 쓰지 않는다. Confluence 도 이 모듈에서는
-읽지도 쓰지도 않는다(템플릿 id 만 상수로 안다).
+읽기 전용 원칙: Redmine 에는 아무것도 쓰지 않는다.
 """
 from __future__ import annotations
 
@@ -42,37 +40,15 @@ log = logging.getLogger(__name__)
 MODEL = os.getenv("TW_SB_MODEL", "claude-opus-5")
 MAX_TOKENS = 16000
 
-#: 공개 등급 → (Confluence 템플릿 id, 템플릿 이름, 붙일 라벨).
-#: 라벨은 임의로 정한 게 아니라 각 템플릿에 실제로 달려 있는 값이다.
-#: 'posted' 는 여기에 넣지 않는다 — 실제 업로드가 끝난 뒤에 붙일 라벨이다.
-TEMPLATES: dict[str, dict] = {
-    "public": {
-        "template_id": "13402115",
-        "name": "Confluence Article Template (전체 공개)",
-        "labels": ["sb"],
-        "ko": "전체 공개",
-    },
-    "partner": {
-        "template_id": "65536001",
-        "name": "Confluence Article (for Partner) Template",
-        "labels": ["sb", "partner"],
-        "ko": "파트너 공개",
-    },
-    "ascp": {
-        "template_id": "95420419",
-        "name": "Confluence Article (for ASCP) Template",
-        "labels": ["sb", "ascp"],
-        "ko": "ASC/ASP 공개",
-    },
-    "internal": {
-        "template_id": "20676609",
-        "name": "Solution Buffer(내부자료) Template",
-        "labels": ["confidential", "sb"],
-        "ko": "내부 공유",
-    },
+#: 공개 등급 → 한글 이름.
+DISCLOSURES: dict[str, str] = {
+    "public": "전체 공개",
+    "partner": "파트너 공개",
+    "ascp": "ASC/ASP 공개",
+    "internal": "내부 공유",
 }
 
-#: partner 템플릿의 체크박스 2종. 화면에서 담당자가 고른다.
+#: partner 등급일 때 공개 대상. 화면에서 담당자가 고른다.
 PARTNER_CHOICES = {
     "pm_global_korea": "일반 파트너 (pm_global & pm_korea)",
     "pm_amazon": "Amazon (pm_amazon)",
@@ -105,13 +81,11 @@ class SBDraft(BaseModel):
         "'2) Description' 본문. 평범한 HTML 로 쓴다 — "
         "<p>, <ul>, <ol>, <li>, <strong>, <em>, <table>, <tr>, <th>, <td>, <br>, "
         "<a href> 만 사용한다. 배경 → 증상 → 원인 → 해결 순서로 쓴다. "
-        "Redmine 이슈 번호와 링크를 반드시 포함한다. "
-        "XHTML 문법에 맞추려 애쓰지 않아도 된다(업로드 직전에 Confluence 가 정규화한다)."))
+        "Redmine 이슈 번호와 링크를 반드시 포함한다."))
 
 
 SYSTEM = """당신은 Point Mobile 기술지원팀의 Solution Buffer(SB) 문서 작성자입니다.
-Redmine 이슈가 Resolved 되면 그 내용을 사내 Confluence 의 Solution Buffer 스페이스에
-올릴 FAQ 문서로 정리합니다.
+Redmine 이슈가 Resolved 되면 그 내용을 Solution Buffer 에 올릴 FAQ 문서로 정리합니다.
 
 SB 문서 규칙:
 - 제목은 자연어(질문형 또는 설명형). 이슈 제목의 [Issue][PM95] 같은 태그는 넣지 않는다.
@@ -234,7 +208,7 @@ def scan() -> dict:
             if prev is not None and prev.source_resolved_at == lr:
                 # 이미 이 해결분으로 만든 행이 있다. 아직 사람 손을 타지 않았다면
                 # 기준일·담당자 설정이 바뀌었을 수 있으니 상태를 다시 매긴다.
-                # 알림을 보냈거나 올린 건은 건드리지 않는다 — 이미 벌어진 일이다.
+                # 알림을 보냈거나 확정한 건은 건드리지 않는다 — 이미 벌어진 일이다.
                 if prev.state in ("backlog", "not_needed", "not_target",
                                   "queued", "draft"):
                     want = _wanted(lr, prev.assignee_name)
@@ -261,9 +235,6 @@ def scan() -> dict:
                 source_resolved_at=lr,
                 assignee_name=issue.assigned_to_name,
                 assignee_email=assignee_email(issue.assigned_to_name),
-                # 이전 문서를 이미 올렸다면 그 페이지를 물려받아 '갱신'이 가능하게 한다.
-                confluence_page_id=prev.confluence_page_id if prev else None,
-                confluence_url=prev.confluence_url if prev else None,
                 created_at=datetime.utcnow(),
             )
             db.add(doc)
@@ -327,10 +298,7 @@ _ALLOWED_TAGS = re.compile(
 def sanitize_html(html: str) -> str:
     """본문에서 위험하거나 뜻 없는 태그를 걷어낸다. **문법 교정은 하지 않는다.**
 
-    XHTML 로 맞추는 일(홑따옴 & 이스케이프, <tbody> 삽입, 안 닫힌 태그)은
-    Confluence 의 변환 API 가 훨씬 정확하게 해 준다 — 업로드 직전에
-    SBConfluence.to_storage() 로 넘긴다. 여기서 흉내 내면 두 규칙이 어긋나
-    오히려 깨진다. 이 함수의 책임은 script/iframe 같은 것을 막는 것뿐이다.
+    이 함수의 책임은 script/iframe 같은 것을 막는 것뿐이다.
     """
     out = re.sub(r"(?is)<(script|style)\b.*?</\1>", "", html or "")
     out = re.sub(r"(?is)<!--.*?-->", "", out)
@@ -363,7 +331,7 @@ def generate(doc_id: int) -> dict:
     from app import usage
 
     # 사용량 대시보드에서 이 호출이 어디서 났는지 보이게 라벨을 붙인다.
-    usage.set_operation("SB 문서 초안", None)
+    usage.set_operation("SB 문서 초안")
     try:
         resp = anthropic.Anthropic().messages.parse(
             model=MODEL,
@@ -382,8 +350,7 @@ def generate(doc_id: int) -> dict:
         return {"ok": False, "error": "refusal", "doc_id": doc_id}
 
     d = resp.parsed_output
-    disclosure = d.disclosure if d.disclosure in TEMPLATES else "internal"
-    tpl = TEMPLATES[disclosure]
+    disclosure = d.disclosure if d.disclosure in DISCLOSURES else "internal"
 
     with issuetrack_session() as db:
         doc = db.get(SBDoc, doc_id)
@@ -393,8 +360,6 @@ def generate(doc_id: int) -> dict:
         doc.disclosure_reason = d.disclosure_reason
         doc.applies_to = d.applies_to
         doc.description_html = sanitize_html(d.description_html)
-        doc.template_id = tpl["template_id"]
-        doc.labels_json = json.dumps(tpl["labels"], ensure_ascii=False)
         doc.model = MODEL
         doc.input_tokens = int(getattr(resp.usage, "input_tokens", 0) or 0)
         doc.output_tokens = int(getattr(resp.usage, "output_tokens", 0) or 0)
@@ -489,12 +454,11 @@ def notify(doc_id: int) -> dict:
 
     from app import mail_templates as MT
 
-    tpl = TEMPLATES[info["disclosure"]]
     rows = [
         f"■ 이슈       : #{info['issue_id']} {info['subject'][:70]}",
         f"                {issue_url(info['issue_id'])}",
         f"■ 문서 제목  : {info['title']}",
-        f"■ 추천 등급  : {info['disclosure']} ({tpl['ko']}) — {info['reason']}",
+        f"■ 추천 등급  : {info['disclosure']} ({DISCLOSURES.get(info['disclosure'], '')}) — {info['reason']}",
         f"■ Applies to : {info['applies_to'][:120]}",
     ]
     if info["revision"] > 1:
@@ -510,7 +474,7 @@ def notify(doc_id: int) -> dict:
                 "관리자에게 대신 보냅니다.\n" if fallback else ""),
         화면주소=f"{_app_url()}/",
     )
-    ok, err = send_as_user(uid, to, subject, body, as_system=True)
+    ok, err = send_as_user(uid, to, subject, body)
     if not ok:
         return {"sent": False, "error": err, "to": to}
 
@@ -568,15 +532,13 @@ EDITABLE = ("title", "disclosure", "applies_to", "description_html")
 
 
 def update_draft(doc_id: int, **fields) -> dict:
-    """화면에서 고친 내용을 반영. 등급을 바꾸면 템플릿·라벨도 따라 바뀐다."""
-    from app.issuetrack.confluence import default_labels
-
+    """화면에서 고친 내용을 반영."""
     with issuetrack_session() as db:
         doc = db.get(SBDoc, doc_id)
         if doc is None:
             return {"ok": False, "error": "문서를 찾을 수 없습니다."}
-        if doc.state == "uploaded":
-            return {"ok": False, "error": "이미 업로드된 문서는 고칠 수 없습니다."}
+        if doc.state == "approved":
+            return {"ok": False, "error": "확정된 문서는 고칠 수 없습니다. 먼저 확정을 취소하세요."}
 
         for k in EDITABLE:
             if k in fields and fields[k] is not None:
@@ -586,28 +548,37 @@ def update_draft(doc_id: int, **fields) -> dict:
         if doc.description_html:
             doc.description_html = sanitize_html(doc.description_html)
         doc.is_troubleshooting = (doc.title or "").startswith("[TR]")
-
-        if doc.disclosure not in TEMPLATES:
+        if doc.disclosure not in DISCLOSURES:
             doc.disclosure = "internal"
-        doc.template_id = TEMPLATES[doc.disclosure]["template_id"]
-        if "labels" in fields and fields["labels"] is not None:
-            doc.labels_json = json.dumps(fields["labels"], ensure_ascii=False)
-        elif "disclosure" in fields:
-            # 등급이 바뀌면 라벨을 그 등급의 기본값으로 되돌린다. 이전 등급의 라벨을
-            # 남겨 두면 confidential 문서에 partner 라벨이 붙는 사고가 난다.
-            doc.labels_json = json.dumps(default_labels(doc), ensure_ascii=False)
+        db.commit()
+    return {"ok": True}
+
+
+def approve(doc_id: int, *, by: str = "") -> dict:
+    """담당자가 내용을 확정한다. 확정된 문서는 고칠 수 없고, 되돌리면 다시 초안이 된다."""
+    with issuetrack_session() as db:
+        doc = db.get(SBDoc, doc_id)
+        if doc is None:
+            return {"ok": False, "error": "문서를 찾을 수 없습니다."}
+        if doc.state not in ("draft", "notified"):
+            return {"ok": False, "error": f"확정할 수 있는 상태가 아닙니다(state={doc.state})."}
+        if not (doc.title or "").strip():
+            return {"ok": False, "error": "제목이 비어 있습니다."}
+        doc.state = "approved"
+        doc.decided_at = datetime.utcnow()
+        doc.decided_by = by or None
         db.commit()
     return {"ok": True}
 
 
 def discard(doc_id: int, *, by: str = "", reason: str = "") -> dict:
-    """올리지 않기로 결정. 초안은 이력으로 남긴다(지우지 않는다)."""
+    """쓰지 않기로 결정. 초안은 이력으로 남긴다(지우지 않는다)."""
     with issuetrack_session() as db:
         doc = db.get(SBDoc, doc_id)
         if doc is None:
             return {"ok": False, "error": "문서를 찾을 수 없습니다."}
-        if doc.state == "uploaded":
-            return {"ok": False, "error": "이미 업로드된 문서입니다."}
+        if doc.state == "approved":
+            return {"ok": False, "error": "확정된 문서입니다. 먼저 확정을 취소하세요."}
         doc.state = "discarded"
         doc.decided_at = datetime.utcnow()
         doc.decided_by = by or None
@@ -618,11 +589,11 @@ def discard(doc_id: int, *, by: str = "", reason: str = "") -> dict:
 
 
 def reopen_draft(doc_id: int) -> dict:
-    """폐기했던 초안을 다시 검토 대상으로 되돌린다."""
+    """폐기했거나 확정한 문서를 다시 검토 대상(초안)으로 되돌린다."""
     with issuetrack_session() as db:
         doc = db.get(SBDoc, doc_id)
-        if doc is None or doc.state != "discarded":
-            return {"ok": False, "error": "폐기된 문서가 아닙니다."}
+        if doc is None or doc.state not in ("discarded", "approved"):
+            return {"ok": False, "error": "폐기되거나 확정된 문서가 아닙니다."}
         doc.state = "draft" if doc.generated_at else "backlog"
         doc.decided_at = None
         doc.decided_by = None
@@ -631,15 +602,8 @@ def reopen_draft(doc_id: int) -> dict:
 
 
 # ------------------------------------------------------------------ 요약 ---
-#: 비용 추정용 실측치(프로토타입 1건 + 초기 생성분 기준). 이슈마다 이력 길이가
-#: 달라 편차가 크므로 '대략 이 정도'를 안내하는 용도로만 쓴다.
-EST_IN_TOKENS = 12000
-EST_OUT_TOKENS = 2500
-PRICE_IN, PRICE_OUT = 5.0, 25.0     # claude-opus-5, $/1M
-
-
-def estimate_cost(n: int) -> float:
-    return n * (EST_IN_TOKENS / 1e6 * PRICE_IN + EST_OUT_TOKENS / 1e6 * PRICE_OUT)
+#: 쓴 비용 표시용 단가(claude-opus-5, $/1M 토큰).
+PRICE_IN, PRICE_OUT = 5.0, 25.0
 
 
 def assignees_without_account() -> list[tuple[str, int]]:

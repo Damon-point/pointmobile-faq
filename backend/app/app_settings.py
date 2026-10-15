@@ -23,7 +23,7 @@ _DEFS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     #   api          — 예전처럼 api.anthropic.com 에 열쇠로 붙는다
     "claude_backend": ("TW_CLAUDE_BACKEND", "subscription", ("subscription", "api")),
     # 외부 시스템에 실제로 쓸 것인가.
-    #   0 — 검증 모드: 메일·Confluence 에 보내지 않고 기록만 한다
+    #   0 — 검증 모드: 메일을 보내지 않고 기록만 한다
     #   1 — 운영: 실제로 쓴다
     "live_writes": ("TWN_LIVE_WRITES", "0", ("0", "1")),
 }
@@ -89,10 +89,6 @@ def set(key: str, value: str, by: str = "") -> None:  # noqa: A001
             row.value, row.updated_by = value, (by or "")
         db.commit()
     forget()
-
-
-def choices(key: str) -> tuple[str, ...]:
-    return _DEFS[key][2]
 
 
 def forget() -> None:

@@ -3,7 +3,7 @@
 - 이 앱이 하는 모든 anthropic `messages.create` 호출을 자동 계측(install())해 토큰·비용을 기록.
 - 비용은 응답의 토큰 수 × **공개 단가**로 계산한 **추정치**(Anthropic 은 호출당 금액을 주지 않음).
   실제 청구액(계약 할인 등)과 다를 수 있고, '이 앱이 한 호출'만 집계한다(계정 전체 아님).
-- 저장: 로컬 PostgreSQL 의 usage 스키마(설정이 없으면 전용 SQLite `usage.db`). 작업(operation) 라벨은 contextvar 로 스테이지가 설정.
+- 저장: 로컬 PostgreSQL 의 usage 스키마(설정이 없으면 전용 SQLite `usage.db`). 작업(operation) 라벨은 contextvar 로 호출부가 설정.
 """
 from __future__ import annotations
 
@@ -28,13 +28,11 @@ _PRICING = {
 _DEFAULT_PRICE = (5.0, 25.0)
 
 _ctx_op = contextvars.ContextVar("usage_op", default="")
-_ctx_mail = contextvars.ContextVar("usage_mail", default=None)
 
 
-def set_operation(label: str, mail_id=None) -> None:
+def set_operation(label: str) -> None:
     """이후 이 컨텍스트(스레드)에서 발생하는 Claude 호출에 붙일 작업 라벨을 설정."""
     _ctx_op.set(label or "")
-    _ctx_mail.set(mail_id)
 
 
 def _price(model: str) -> tuple[float, float]:
@@ -56,7 +54,7 @@ _usage = Table(
     "token_usage", _meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("ts", Text), Column("day", Text, index=True), Column("month", Text, index=True),
-    Column("model", Text), Column("operation", Text), Column("mail_id", Text),   # 메일 번호 또는 작업 키('job-18')
+    Column("model", Text), Column("operation", Text), Column("mail_id", Text),   # tw-next 때 쓰던 칸 — 지금은 비워 둔다
     Column("input_tokens", Integer), Column("output_tokens", Integer),
     Column("cache_read", Integer), Column("cache_write", Integer), Column("cost_usd", Float),
 )
@@ -74,7 +72,7 @@ def _eng():
     return _engine
 
 
-def record(model, usage, operation=None, mail_id=None) -> None:
+def record(model, usage, operation=None) -> None:
     """한 번의 Claude 호출 사용량을 기록. usage = 응답의 .usage 객체."""
     try:
         inp = int(getattr(usage, "input_tokens", 0) or 0)
@@ -84,7 +82,6 @@ def record(model, usage, operation=None, mail_id=None) -> None:
     except Exception:  # noqa: BLE001
         return
     op = operation if operation is not None else _ctx_op.get()
-    mid = mail_id if mail_id is not None else _ctx_mail.get()
     now = datetime.now()
     cost = _cost(model, inp, out, cr, cw)
     try:
@@ -92,7 +89,6 @@ def record(model, usage, operation=None, mail_id=None) -> None:
             c.execute(_usage.insert().values(
                 ts=now.isoformat(timespec="seconds"), day=now.strftime("%Y-%m-%d"),
                 month=now.strftime("%Y-%m"), model=model or "?", operation=op or "기타",
-                mail_id=None if mid is None else str(mid),
                 input_tokens=inp, output_tokens=out, cache_read=cr, cache_write=cw, cost_usd=cost))
     except Exception:  # noqa: BLE001
         pass   # 사용량 기록 실패가 본 작업을 막지 않는다.
@@ -177,5 +173,5 @@ def by_operation(scope: str = "month") -> list[dict]:
 
 def recent(n: int = 50) -> list[dict]:
     return _rows(
-        "SELECT ts, model, operation, mail_id, input_tokens, output_tokens, "
+        "SELECT ts, model, operation, input_tokens, output_tokens, "
         "cache_read, cost_usd FROM token_usage ORDER BY id DESC LIMIT :n", {"n": n})

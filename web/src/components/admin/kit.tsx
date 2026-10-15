@@ -105,18 +105,6 @@ export function SecretInput({ value, onChange, saved, placeholder }: { value: st
   );
 }
 
-export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: React.ReactNode }) {
-  return (
-    <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
-            className="inline-flex items-center gap-2.5 text-left disabled:opacity-50">
-      <span className={cx("relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors", checked ? "bg-brand" : "bg-line-strong")}>
-        <span className={cx("absolute top-[3px] h-4 w-4 rounded-full bg-white shadow transition-all", checked ? "left-[21px]" : "left-[3px]")} />
-      </span>
-      {label && <span className="text-[14px]">{label}</span>}
-    </button>
-  );
-}
-
 /** 설정됨 / 없음 표시 */
 export function SetBadge({ ok, okText = "설정됨", noText = "없음" }: { ok: boolean; okText?: string; noText?: string }) {
   return (

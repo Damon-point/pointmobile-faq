@@ -102,16 +102,6 @@ def set_(key: str, value) -> None:
     _cache.pop(key, None)       # 바꾼 즉시 반영
 
 
-def reset(key: str) -> None:
-    """저장된 값을 지워 env/코드 기본값으로 되돌린다."""
-    with issuetrack_session() as db:
-        row = db.get(SyncState, _PREFIX + key)
-        if row is not None:
-            db.delete(row)
-            db.commit()
-    _cache.pop(key, None)
-
-
 @dataclass
 class Config:
     sb_auto_generate: bool

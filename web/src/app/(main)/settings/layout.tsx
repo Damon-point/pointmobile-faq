@@ -13,7 +13,7 @@ const GROUPS: { title: string; items: Item[] }[] = [
   {
     title: "연결",
     items: [
-      { href: "/settings/web", label: "Redmine · Confluence" },
+      { href: "/settings/web", label: "Redmine" },
       { href: "/settings/mail", label: "메일 발송" },
       { href: "/settings/claude", label: "Claude 호출", admin: true },
     ],

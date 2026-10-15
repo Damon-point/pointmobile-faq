@@ -1,9 +1,8 @@
 """
-Solution Buffer — Redmine salesissue 감시 · SB 문서 검토/업로드 · 통계 · 동작 설정.
+Solution Buffer — Redmine salesissue 감시 · SB 문서 검토/확정 · 통계 · 동작 설정.
 
-8080 의 /issues(pages/issues.py · sb_docs.py · issue_stats.py)와 설정의 Solution Buffer 칸을 옮겼다.
   · SB 문서는 **내 담당 건만** 보이고 고칠 수 있다(관리자는 전체).
-  · Confluence 업로드·검토 요청 메일은 사람이 눌렀을 때만. 검증 모드면 app.shadow 가 막고 기록만 한다.
+  · 검토 요청 메일은 자동 생성분 외에는 사람이 눌렀을 때만. 검증 모드면 app.shadow 가 막고 기록만 한다.
   · Redmine 시각은 UTC 로 들어와 있어 KST(+09:00) ISO 로 내보낸다.
 """
 from __future__ import annotations
@@ -39,14 +38,13 @@ SB_PAGE = 30
 #: SB 상태 → 한글 이름. 화면 색은 web 쪽에서 정한다.
 SB_STATES = {
     "backlog": "소급 대기", "not_needed": "소급 불필요", "not_target": "SB 대상 아님",
-    "queued": "생성 대기", "draft": "초안", "notified": "검토 요청됨", "approved": "승인됨",
-    "uploaded": "업로드 완료", "discarded": "폐기", "error": "생성 실패",
+    "queued": "생성 대기", "draft": "초안", "notified": "검토 요청됨", "approved": "확정",
+    "discarded": "폐기", "error": "생성 실패",
 }
 #: 기본으로 보여 줄 상태 — 사람이 할 일이 남은 것들.
-SB_ACTIVE = ["queued", "draft", "notified", "approved", "error"]
+SB_ACTIVE = ["queued", "draft", "notified", "error"]
 #: 칩으로 만들지 않는 상태(감시 시작 때 한 번 정리하고 끝난 소급분).
 SB_HIDDEN = ["backlog", "not_needed", "not_target"]
-KNOWN_LABELS = ["sb", "confidential", "partner", "ascp", "posted"]
 
 ACTION_WHAT = {
     "resolve": "상태를 Resolved · Closed · Rejected 로 바꿨다 (첫 손길이 곧 종결)",
@@ -238,11 +236,10 @@ def _doc_dict(d: SBDoc, subject: str, issue_status: str) -> dict:
         "reason": d.disclosure_reason or "", "applies_to": d.applies_to or "",
         "description_html": d.description_html or "",
         "partners": json.loads(d.partners_json or "[]"),
-        "labels": json.loads(d.labels_json or "[]"),
         "assignee": d.assignee_name or "", "email": d.assignee_email or "",
-        "error": d.error or "", "url": d.confluence_url or "", "page_id": d.confluence_page_id or "",
+        "error": d.error or "",
         "resolved_at": _kst(d.source_resolved_at), "generated_at": _kst(d.generated_at),
-        "notified_at": _kst(d.notified_at), "uploaded_at": _kst(d.uploaded_at),
+        "notified_at": _kst(d.notified_at), "decided_at": _kst(d.decided_at),
         "decided_by": d.decided_by or "",
         "in_tok": d.input_tokens or 0, "out_tok": d.output_tokens or 0,
         "subject": subject or "", "issue_status": issue_status or "", "issue_url": issue_url(d.issue_id),
@@ -287,16 +284,8 @@ def sb_list(request: Request, q: str = "", states: str = "active", mine: int = 0
         "total": total, "docs": docs, "me": me, "admin": admin, "scope": scope,
         "counts": summ["counts"], "spent_usd": summ["spent_usd"], "generating": summ["running"],
         "states": SB_STATES, "active": SB_ACTIVE, "hidden": SB_HIDDEN,
-        "templates": {k: {"ko": v["ko"], "name": v["name"], "labels": v["labels"]} for k, v in sb.TEMPLATES.items()},
-        "default_labels": {k: _default_labels(k) for k in sb.TEMPLATES},
-        "partners": sb.PARTNER_CHOICES, "known_labels": KNOWN_LABELS,
+        "disclosures": sb.DISCLOSURES, "partners": sb.PARTNER_CHOICES,
     }
-
-
-def _default_labels(disclosure: str) -> list[str]:
-    from app.issuetrack.confluence import default_labels_for
-
-    return default_labels_for(disclosure)
 
 
 def _load_doc_for(u: dict, doc_id: int) -> dict:
@@ -323,13 +312,11 @@ class DraftIn(BaseModel):
     applies_to: str = ""
     description_html: str = ""
     partners: list[str] = []
-    labels: list[str] = []
 
 
 def _save(doc_id: int, body: DraftIn) -> None:
     res = sb.update_draft(doc_id, title=body.title, disclosure=body.disclosure, applies_to=body.applies_to,
-                          description_html=body.description_html, partners=body.partners,
-                          labels=body.labels or None)
+                          description_html=body.description_html, partners=body.partners)
     if not res.get("ok"):
         raise HTTPException(409, res.get("error") or "저장 실패")
 
@@ -340,21 +327,6 @@ def sb_save(doc_id: int, body: DraftIn, request: Request):
     _load_doc_for(u, doc_id)
     _save(doc_id, body)
     return {"ok": True, "message": "저장했습니다", "doc": _load_doc_for(u, doc_id)}
-
-
-@router.post("/sb/{doc_id}/preview")
-def sb_preview(doc_id: int, body: DraftIn, request: Request):
-    """저장 → Confluence 변환 API 로 문법 검증 → 렌더 결과. 읽기만 한다."""
-    from app.issuetrack import confluence as C
-
-    u = _user(request)
-    _load_doc_for(u, doc_id)
-    _save(doc_id, body)
-    res = C.preview(doc_id)
-    if not res.get("ok"):
-        raise HTTPException(502, f"검증 실패: {res.get('error')}")
-    return {"ok": True, "title": res["title"], "labels": res["labels"], "html": res["html"],
-            "exists": res.get("exists")}
 
 
 @router.post("/sb/{doc_id}/notify")
@@ -368,22 +340,15 @@ def sb_notify(doc_id: int, body: DraftIn, request: Request):
     return {"ok": True, "message": f"검토 요청 메일을 보냈습니다 → {', '.join(res.get('to') or [])}"}
 
 
-@router.post("/sb/{doc_id}/upload")
-def sb_upload(doc_id: int, body: DraftIn, request: Request):
-    from app import shadow
-    from app.issuetrack import confluence as C
-
+@router.post("/sb/{doc_id}/approve")
+def sb_approve(doc_id: int, body: DraftIn, request: Request):
     u = _user(request)
     _load_doc_for(u, doc_id)
     _save(doc_id, body)
-    res = C.publish(doc_id, by=u.get("username") or "")
+    res = sb.approve(doc_id, by=u.get("username") or "")
     if not res.get("ok"):
-        raise HTTPException(409, f"업로드 실패: {res.get('error')}")
-    kind = "갱신" if res.get("action") == "updated" else "신규"
-    msg = f"업로드 완료({kind}) — {res.get('url')}"
-    if not shadow.live():
-        msg = f"검증 모드 — Confluence 에 쓰지 않고 기록만 했습니다({kind})"
-    return {"ok": True, "message": msg, "url": res.get("url")}
+        raise HTTPException(409, res.get("error") or "확정 실패")
+    return {"ok": True, "message": "확정했습니다"}
 
 
 _gen_running: set[int] = set()
@@ -437,7 +402,7 @@ def sb_reopen(doc_id: int, request: Request):
     res = sb.reopen_draft(doc_id)
     if not res.get("ok"):
         raise HTTPException(409, res.get("error") or "실패")
-    return {"ok": True, "message": "되돌렸습니다"}
+    return {"ok": True, "message": "초안으로 되돌렸습니다"}
 
 
 # ── 통계 ──────────────────────────────────────────────────────────────────────

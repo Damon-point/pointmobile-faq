@@ -26,9 +26,9 @@ export type Timeline = {
 export type SbDoc = {
   id: number; issue_id: number; revision: number; state: string; state_label: string; origin: string;
   superseded: boolean; title: string; disclosure: string; reason: string; applies_to: string;
-  description_html: string; partners: string[]; labels: string[]; assignee: string; email: string;
-  error: string; url: string; page_id: string; resolved_at: string; generated_at: string;
-  notified_at: string; uploaded_at: string; decided_by: string; in_tok: number; out_tok: number;
+  description_html: string; partners: string[]; assignee: string; email: string;
+  error: string; resolved_at: string; generated_at: string;
+  notified_at: string; decided_at: string; decided_by: string; in_tok: number; out_tok: number;
   subject: string; issue_status: string; issue_url: string;
   generating: boolean; gen_result: { ok: boolean; error?: string; title?: string } | null;
 };
@@ -36,11 +36,8 @@ export type SbList = {
   total: number; docs: SbDoc[]; me: string; admin: boolean; scope: string;
   counts: Record<string, number>; spent_usd: number; generating: boolean;
   states: Record<string, string>; active: string[]; hidden: string[];
-  templates: Record<string, { ko: string; name: string; labels: string[] }>;
-  default_labels: Record<string, string[]>;
-  partners: Record<string, string>; known_labels: string[];
+  disclosures: Record<string, string>; partners: Record<string, string>;
 };
-export type SbPreview = { ok: boolean; title: string; labels: string[]; html: string; exists: { id: string; title: string; url: string } | null };
 
 export type Hist = { labels: string[]; counts: number[]; n: number };
 export type IssueStats = {
@@ -90,7 +87,6 @@ export const SB_STATE_TONE: Record<string, string> = {
   draft: "bg-info-soft text-info",
   notified: "bg-[#ebeafe] text-[#4f46e5] dark:bg-[#24223f] dark:text-[#a5a1f5]",
   approved: "bg-ok-soft text-ok",
-  uploaded: "bg-ok-soft text-ok",
   error: "bg-err-soft text-err",
   discarded: "bg-muted-soft text-ink-3",
   backlog: "bg-muted-soft text-ink-3",

@@ -2,7 +2,7 @@
 API 프로세스의 기동 · 주기 작업 — Redmine 수집 → SB 초안 생성·검토 요청 → 통계 데우기.
 
 tw-next 의 app.background 에서 Redmine/SB 부분만 옮겼다. 메일 수신·WhiteList 등은 이 프로젝트에 없다.
-외부로 나가는 쓰기(Confluence·메일)는 app.shadow 가 막는다(검증 모드).
+외부로 나가는 쓰기(메일)는 app.shadow 가 막는다(검증 모드).
 """
 from __future__ import annotations
 

@@ -1,9 +1,9 @@
 """
-Solution Buffer API — Redmine salesissue 감시 · SB 문서 검토/업로드 · 통계 · 설정.
+Solution Buffer API — Redmine salesissue 감시 · SB 문서 검토/확정 · 통계 · 설정.
 
 tw-next(3080)에서 Solution Buffer 만 떼어 낸 독립 프로젝트다.
-- 업무 코드는 backend/app(이슈 수집·SB 문서·Confluence·메일 발송), DB 는 로컬 PostgreSQL(sbnext).
-- 외부 쓰기(Confluence 업로드·메일)는 검증 모드(app.shadow)가 막고 기록만 한다. 운영 전환은 관리자가 한다.
+- 업무 코드는 backend/app(이슈 수집·SB 문서·메일 발송), DB 는 로컬 PostgreSQL(sbnext).
+- 외부 쓰기(메일)는 검증 모드(app.shadow)가 막고 기록만 한다. 운영 전환은 관리자가 한다.
 - Redmine 수집 · SB 초안 생성 · 통계 데우기는 이 프로세스의 스레드로 돈다(runtime.py).
 - 회원가입(회사명 · 이메일 · ID · 비밀번호)은 승인 대기로 들어가고, 관리자가 승인해야 로그인할 수 있다.
 - 로그인은 users 표의 비밀번호로 확인하고, 서명된 쿠키 세션을 쓴다.

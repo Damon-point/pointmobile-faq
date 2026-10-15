@@ -25,16 +25,17 @@
 Reply-To 와 수신자 목록(admin_emails 등)에 쓰인다.
 자격증명이 하나도 없으면 (False, 사유) 반환 → 호출부에서 안내.
 
-TW_MAIL_FROM 을 두지 않으면 동작은 예전 그대로다(본인 명의 발송).
+TW_MAIL_FROM 을 두지 않으면 보내는 계정(user_id) 명의로 나가고, 그 사람 이름 서명이 붙는다.
+이 앱이 보내는 메일은 모두 시스템 안내다(SB 검토 요청 · 회원가입 · 계정 알림).
 """
 from __future__ import annotations
-from app import shadow as _shadow
 
 import os
 import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 
+from app import shadow as _shadow
 from app.database import get_session
 from app.models import MailCredential, User
 from app.security import decrypt_secret
@@ -46,8 +47,6 @@ class SendIdentity:
     password: str
     host: str
     port: int
-    #: 이 계정의 메일 서명(HTML). 보내는 모든 메일 끝에 붙는다.
-    signature: str = ""
 
 
 def _smtp_host_for(pop_server: str) -> str:
@@ -83,9 +82,6 @@ def get_send_identity(user_id: int) -> "SendIdentity | None":
             email=c.email_address.strip(), password=pw,
             host=_smtp_host_for(c.pop_server),
             port=int(os.getenv("USER_SMTP_PORT", "587") or "587"),
-            # 등록해 둔 서명이 있으면 그것, 없으면 이름 한 줄.
-            signature=((getattr(c, "signature_html", "") or "").strip()
-                       or name_signature(c.email_address)),
         )
 
 
@@ -102,7 +98,7 @@ def system_from() -> tuple[str, str, str]:
     두지 않으면 회신이 반송된다.
     """
     return (os.getenv("TW_MAIL_FROM", "").strip(),
-            os.getenv("TW_MAIL_FROM_NAME", "").strip() or "TW Automation",
+            os.getenv("TW_MAIL_FROM_NAME", "").strip() or "Solution Buffer",
             os.getenv("TW_MAIL_REPLY_TO", "").strip())
 
 
@@ -198,9 +194,8 @@ def user_email(user_id: int) -> str:
 def _role_emails(*roles: str, exclude_username: str = "") -> list[str]:
     """해당 역할 사용자들의 메일 주소 — **등록해 둔 것이 없으면 아이디에서 찾는다**.
 
-    예전에는 자격증명(MailCredential)이 있는 사람만 골라서, 아이디가 메일 주소인
-    계정조차 수신자에서 빠졌다. 그 바람에 RN 1차 승인 요청이 '수신자 0명'으로 아예
-    나가지 못했다. 중복 주소는 한 번만 남긴다.
+    자격증명(MailCredential)이 있는 사람만 고르면 아이디가 메일 주소인 계정조차
+    수신자에서 빠진다. 중복 주소는 한 번만 남긴다.
     """
     with get_session() as db:
         q = db.query(User.id, User.username).filter(User.role.in_(roles), User.status == "approved")
@@ -256,77 +251,11 @@ def system_admin_emails() -> list[str]:
     return _role_emails("admin", exclude_username="admin")
 
 
-
-
 def app_url() -> str:
     """안내 메일에 싣는 서비스 주소. 배포처가 바뀌면 TW_APP_URL 로 덮는다."""
     import os
 
-    return os.getenv("TW_APP_URL", "http://192.168.121.35:8080").rstrip("/")
-
-
-def final_reviewer_emails() -> list[str]:
-    """최종 승인자(role=final_reviewer) 이메일 목록 — RN for Sales·Newsletter 결재 수신자.
-
-    아직 최종 승인자를 만들지 않았으면 **admin 으로 폴백**한다. 수신자가 0명이면
-    결재 요청 자체가 발송 실패로 막히므로, 역할을 나눈 직후에도 업무가 멈추지 않게 한다.
-    """
-    return _role_emails("final_reviewer") or _role_emails("admin")
-
-
-def mid_reviewer_emails() -> list[str]:
-    """RN 승인자(role=mid_reviewer) 이메일 목록 — RN 1차 승인 요청 수신자."""
-    return _role_emails("mid_reviewer")
-
-
-#: Outlook 이 쓰는 영문 요일·달 이름. 서버 로캘이 한국어면 strftime 이 '수요일' 을
-#: 내놓아 사내 메일과 모양이 달라진다 — 그래서 직접 박아 둔다.
-_WDAY_EN = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
-            "Saturday", "Sunday")
-_MON_EN = ("January", "February", "March", "April", "May", "June", "July",
-           "August", "September", "October", "November", "December")
-
-
-def _outlook_datetime(raw: str) -> str:
-    """메일 날짜 → Outlook 인용부의 'Sent:' 표기.
-
-    실측(사내 회신 60통): 'Wednesday, August 19, 2026 11:33 AM' — 요일·달은 영문
-    전체 이름, 일·시는 0 을 채우지 않는다. 못 읽으면 원문을 그대로 둔다.
-    """
-    from email.utils import parsedate_to_datetime
-
-    s = (raw or "").strip()
-    if not s:
-        return ""
-    try:
-        dt = parsedate_to_datetime(s)
-    except Exception:  # noqa: BLE001
-        return s
-    if dt is None:
-        return s
-    h = dt.hour % 12 or 12
-    ampm = "AM" if dt.hour < 12 else "PM"
-    return (f"{_WDAY_EN[dt.weekday()]}, {_MON_EN[dt.month - 1]} {dt.day}, "
-            f"{dt.year} {h}:{dt.minute:02d} {ampm}")
-
-
-def _outlook_addrs(raw: str) -> str:
-    """수신자 헤더 → Outlook 인용부 표기(세미콜론 구분).
-
-    이름이 있으면 'Name <addr>', 없으면 주소만 쓴다. 저장된 값은 쉼표 구분에 줄바꿈이
-    섞여 있어 그대로 실으면 인용부가 깨진다.
-    """
-    from email.utils import getaddresses
-
-    out = []
-    for name, addr in getaddresses([(raw or "").replace("\r\n", " ").replace("\n", " ")]):
-        # 표시 이름의 작은따옴표는 그대로 둔다 — 사내 메일이 "'PM_SW' <...>" 로
-        # 보이는 건 Outlook 이 아니라 주소록에 그렇게 들어 있기 때문이다.
-        name, addr = (name or "").strip(), (addr or "").strip()
-        if not addr:
-            continue
-        out.append(f"{name} <{addr}>" if name else addr)
-    return "; ".join(out)
+    return os.getenv("TW_APP_URL", "http://192.168.121.35:3070").rstrip("/")
 
 
 #: 사내 메일의 본문 서식 — Outlook 이 만든 회신 메일의 <style> 블록을 그대로 옮겼다.
@@ -342,11 +271,6 @@ _MAIL_CSS = "\n".join([
     "a:link, span.MsoHyperlink",
     "   {color:#467886; text-decoration:underline;}",
 ])
-
-#: 회신 본문과 인용부를 가르는 줄 — Outlook 이 쓰는 값 그대로.
-_QUOTE_RULE = ("border:none;border-top:solid #E1E1E1 1.0pt;"
-               "padding:3.0pt 0cm 0cm 0cm")
-
 
 def _esc(s: str) -> str:
     from html import escape
@@ -370,51 +294,12 @@ def _text_to_html(text: str) -> str:
     return "\n".join(out)
 
 
-def _inner_html(doc: str) -> str:
-    """원본 HTML 에서 <body> 안쪽만 꺼낸다 — 통째로 넣으면 문서가 겹쳐 깨진다."""
-    import re as _re
-
-    s = doc or ""
-    m = _re.search(r"<body[^>]*>(.*)</body>", s, _re.S | _re.I)
-    if m:
-        s = m.group(1)
-    # 원본의 <style> 은 우리 서식을 덮어쓸 수 있어 걷어낸다.
-    return _re.sub(r"<style[^>]*>.*?</style>", "", s, flags=_re.S | _re.I)
-
-
-def quote_html(*, sender: str = "", sent: str = "", to: str = "", cc: str = "",
-               subject: str = "", body_text: str = "", body_html: str = "") -> str:
-    """원본 인용부를 **Outlook 과 같은 HTML** 로 만든다.
-
-    실측한 구조(사내 회신 메일):
-      <div style='border-top:solid #E1E1E1 1.0pt; …'>   ← 본문과 가르는 줄
-        <p class=MsoNormal><b>From:</b> …<br><b>Sent:</b> …<br>…</p>
-      </div>
-      (그 아래 원본 본문)
-    """
-    rows = [("From", _outlook_addrs(sender) or (sender or "").strip()),
-            ("Sent", _outlook_datetime(sent)),
-            ("To", _outlook_addrs(to)),
-            ("Cc", _outlook_addrs(cc)),
-            ("Subject", (subject or "").strip())]
-    head = "<br>".join("<b>" + k + ":</b> " + _esc(v) for k, v in rows if v)
-    inner = (_inner_html(body_html) if (body_html or "").strip()
-             else _text_to_html(body_text))
-    if not head and not inner:
-        return ""
-    return ("<div><div style='" + _QUOTE_RULE + "'>"
-            "<p class=MsoNormal>" + head + "<o:p></o:p></p></div>"
-            + inner + "</div>")
-
-
-def build_html_mail(body: str, *, quote: str = "", signature: str = "") -> str:
-    """평문 본문 + (서명) + (인용 HTML) → 사내 서식의 HTML 메일 한 통."""
+def build_html_mail(body: str, *, signature: str = "") -> str:
+    """평문 본문 + (서명) → 사내 서식의 HTML 메일 한 통."""
     parts = [_text_to_html(body)]
     if (signature or "").strip():
         parts += ["<p class=MsoNormal><o:p>&nbsp;</o:p></p>",
                   signature if "<" in signature else _text_to_html(signature)]
-    if (quote or "").strip():
-        parts += ["<p class=MsoNormal><o:p>&nbsp;</o:p></p>", quote]
     return ('<html><head><meta http-equiv="Content-Type" '
             'content="text/html; charset=utf-8"><style><!--\n'
             + _MAIL_CSS
@@ -422,43 +307,6 @@ def build_html_mail(body: str, *, quote: str = "", signature: str = "") -> str:
             + "\n".join(parts)
             + "\n</div></body></html>")
 
-
-def quote_original(*, sender: str = "", sent: str = "", to: str = "",
-                   cc: str = "", subject: str = "", body: str = "") -> str:
-    """원본 메일을 회신 본문 아래에 붙일 **인용 블록**으로 만든다.
-
-    사내에서 실제로 오가는 전체회신 메일 60통을 뜯어 그 모양에 맞췄다(2026-08-19):
-      · '-----Original Message-----' 줄은 **쓰지 않는다** (58/60 이 그렇다).
-        빈 줄 하나 뒤에 곧바로 'From:' 으로 시작한다.
-      · 헤더 라벨은 영문 From/Sent/To/Cc/Subject (211/212).
-      · Sent 는 'Wednesday, August 19, 2026 11:33 AM' 형식.
-      · To/Cc 는 세미콜론 구분. Cc 가 없으면 줄째 뺀다.
-    원본 본문에 이미 이전 인용이 들어 있으면 그대로 딸려와 체인이 이어진다
-    (실측: 한 메일에 인용 블록이 최대 30개까지 쌓여 있다).
-    """
-    rows = [("From", _outlook_addrs(sender) or (sender or "").strip()),
-            ("Sent", _outlook_datetime(sent)),
-            ("To", _outlook_addrs(to)),
-            ("Cc", _outlook_addrs(cc)),
-            ("Subject", (subject or "").strip())]
-    lines = [f"{k}: {v}" for k, v in rows if v]
-    text = (body or "").strip()
-    if not lines and not text:
-        return ""
-    out = ["", *lines]
-    if text:
-        out += ["", text]
-    return "\n".join(out)
-
-
-def quote_of_mail(mail) -> str:
-    """CachedMail(또는 같은 필드를 가진 dict) → 인용 블록."""
-    def g(k: str) -> str:
-        v = mail.get(k) if isinstance(mail, dict) else getattr(mail, k, "")
-        return str(v or "")
-    return quote_original(
-        sender=g("sender"), sent=g("received_at"), to=g("to_recipients"),
-        cc=g("cc_recipients"), subject=g("subject"), body=g("body_text"))
 
 def html_to_text(doc: str) -> str:
     """HTML 조각 → 평문. 평문판에도 서명이 남아야 해서 쓴다(정교할 필요는 없다)."""
@@ -470,17 +318,6 @@ def html_to_text(doc: str) -> str:
     s = _re.sub(r"<[^>]+>", "", s)
     s = unescape(s).replace(chr(160), " ")
     return nl.join(x.rstrip() for x in s.splitlines()).strip()
-
-
-def quote_html_of_mail(mail) -> str:
-    """CachedMail(또는 같은 필드를 가진 dict) → HTML 인용부."""
-    def g(k: str) -> str:
-        v = mail.get(k) if isinstance(mail, dict) else getattr(mail, k, "")
-        return str(v or "")
-    return quote_html(
-        sender=g("sender"), sent=g("received_at"), to=g("to_recipients"),
-        cc=g("cc_recipients"), subject=g("subject"),
-        body_text=g("body_text"), body_html=g("body_html"))
 
 
 def display_name_for(email: str) -> str:
@@ -519,30 +356,16 @@ def name_signature(email: str) -> str:
             + name + "</span></b></p>")
 
 
-def send_as_user(
-    user_id: int, to: "list[str] | str", subject: str, body: str,
-    attachments: "list[tuple[str, bytes]] | None" = None,
-    *, in_reply_to: str = "", references: str = "", cc: "list[str] | str | None" = None,
-    app_marker: str = "1", quote: str = "", quote_html: str = "",
-    signature: str = "", as_system: bool = False,
-) -> tuple[bool, str]:
-    """메일 발송. 보내는 사람 표시는 as_system 이 가른다.
+def send_as_user(user_id: int, to: "list[str] | str", subject: str, body: str) -> tuple[bool, str]:
+    """시스템 안내 메일 발송. 반환 (성공, 오류사유). 자격증명 미등록이면 (False, 안내).
 
-    as_system=False(기본) — **사람이 한 일**이라 그 사람 명의로 나간다(From = 본인 주소).
-    as_system=True        — **시스템이 알리는 것**이라 시스템 명의로 나간다(TW_MAIL_FROM).
-    SMTP 로그인은 둘 다 공용 계정(TW_MAIL_ACCOUNT) 하나로 한다 — 사람마다 앱 비밀번호를
-    등록하지 않아도 되게. 설정이 없으면 예전처럼 본인 계정으로 로그인한다.
-
-    in_reply_to: 원본 메일의 Message-ID 를 주면 In-Reply-To/References 헤더를 붙여
-    **원본 메일 스레드에 회신**으로 붙는다(받은 편지함 필터가 원본 기준일 때 유용).
-    cc: 참조인. 원본의 To/Cc 문자열을 그대로 넘겨도 된다 — 발신자 본인과 수신자(To)와
-        중복되는 주소는 자동으로 걸러 준다(전체 회신 시 참조인 보존용).
-    quote: 본문 아래에 붙일 원본 인용 블록(quote_original·quote_of_mail 로 만든다).
-    반환 (성공, 오류사유). 자격증명 미등록이면 (False, 안내)."""
-    if _shadow.blocked("mail", "send", user_id=user_id, to=to, cc=cc, subject=subject, body=body,
-                       attachments=[n for n, _b in (attachments or [])], as_system=as_system):
+    SMTP 로그인은 공용 계정(TW_MAIL_ACCOUNT) 하나로 한다 — 없으면 user_id 계정으로.
+    보이는 발신자는 시스템 주소(TW_MAIL_FROM), 답장은 시스템 관리자에게 간다.
+    시스템 주소를 정하지 않았으면 user_id 명의로 나가고 그 사람 이름 서명이 붙는다.
+    """
+    if _shadow.blocked("mail", "send", user_id=user_id, to=to, subject=subject, body=body):
         return True, ""
-    from email.utils import formataddr, formatdate, getaddresses, make_msgid
+    from email.utils import formataddr, formatdate, make_msgid
 
     ident = relay_identity(user_id)
     if ident is None:
@@ -554,95 +377,43 @@ def send_as_user(
 
     # ── 보이는 발신자 ────────────────────────────────────────────────────────
     # **사람 주소는 From 에 넣지 않는다.** 앱이 보낸 메일을 그 사람이 직접 쓴 것으로
-    # 읽어 혼선이 컸다(2026-08-25 사용자 지적). 표시 이름도 사람 이름을 쓰지 않는다 —
-    # 이름만 봐도 같은 오해가 생긴다. 누가 처리했는지는 Reply-To 와 본문 끝 서명이 전한다.
-    _sys_from, _sys_name, _sys_reply = system_from()
-    _pf_addr, _pf_name, _pf_sig = sender_profile(user_id)
-    _fallback_reply = _sys_reply or (system_admin_emails() or [ident.email])[0]
-    if _sys_from:
-        show_from, show_name = _sys_from, _sys_name
-        if as_system:
-            # 시스템이 알리는 메일 — 답장은 시스템 관리자가 받는다.
-            reply_to = _fallback_reply
-            _pf_sig = ""                   # 개인 서명을 붙이지 않는다
-        else:
-            # 사람이 누른 메일 — 답장은 **그 사람**에게 간다. 주소를 못 찾으면 관리자.
-            reply_to = _pf_addr or _fallback_reply
+    # 읽어 혼선이 컸다(2026-08-25 사용자 지적).
+    sys_from, sys_name, sys_reply = system_from()
+    if sys_from:
+        show_from, show_name, signature = sys_from, sys_name, ""
+        # 시스템 주소에 사서함이 없을 수 있어 답장은 시스템 관리자가 받는다.
+        reply_to = sys_reply or (system_admin_emails() or [ident.email])[0]
     else:
-        # 시스템 주소를 정하지 않았으면 예전 그대로 본인 명의로 나간다.
-        show_from = _pf_addr or ident.email
-        show_name = _pf_name
-        reply_to = ""
-
-    # 참조인 — 원본 수신자에서 **보이는 발신자**·수신자(To)와 겹치는 주소는 뺀다.
-    # 로그인 계정(ident.email)은 여기서 빼지 않는다. 공용 계정으로 로그인해 남의 명의로
-    # 보내게 된 뒤로는 그 주소가 '보낸 사람'이 아니라서, 빼 버리면 참조로 받아야 할
-    # 사람이 조용히 사라진다(항상 참조 설정이 그 경우다).
-    seen = {t.lower() for t in tos} | {show_from.lower()}
-    cc_list: list[str] = []
-    if cc:
-        cands = cc if isinstance(cc, (list, tuple)) else [cc]
-        raw = ", ".join(str(c) for c in cands if c)
-        for _n, a in getaddresses([raw]):
-            a = (a or "").strip()
-            if a and "@" in a and a.lower() not in seen:
-                seen.add(a.lower())
-                cc_list.append(a)
+        # 시스템 주소를 정하지 않았으면 보내는 계정 명의로 나간다.
+        pf_addr, pf_name, signature = sender_profile(user_id)
+        show_from, show_name, reply_to = pf_addr or ident.email, pf_name, ""
 
     # 항상 참조 — 앱이 내보내는 모든 메일을 한 사람이 함께 받아 두게 한다.
     # 이미 보낸 사람이거나 받는 사람이면 넣지 않는다(같은 메일을 두 번 받게 된다).
-    for a in always_cc():
-        if a.lower() not in seen:
-            seen.add(a.lower())
-            cc_list.append(a)
+    seen = {t.lower() for t in tos} | {show_from.lower()}
+    cc_list = [a for a in always_cc() if a.lower() not in seen]
 
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = formataddr((show_name, show_from)) if show_name else show_from
     msg["To"] = ", ".join(tos)
-    # 보이는 주소가 그 사람 것이 아닐 때는 답장이 갈 곳을 따로 적어 준다 — 시스템
-    # 주소에 사서함이 없으면 그리로 온 답장은 반송된다.
     if reply_to:
         msg["Reply-To"] = reply_to
-    # Message-ID·Date 를 **직접** 단다. smtplib 도, 사내 메일 서버도 붙여 주지 않아
-    # 우리가 보낸 메일에는 식별자가 아예 없었다(실측 2026-08-19, 수신함 원문 확인).
-    # 그래서 (1) 받는 사람이 회신해도 우리 메일을 가리킬 수 없고, (2) 그 회신을 다시
-    # 수집할 때 message_id 로 묶는 중복 제거가 헛돌고, (3) Date 가 없어 클라이언트가
-    # 수신 시각을 서버 헤더로 추정한다.
+    # Message-ID·Date 를 **직접** 단다. smtplib 도, 사내 메일 서버도 붙여 주지 않는다
+    # (실측 2026-08-19, 수신함 원문 확인).
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=(show_from.rpartition("@")[2] or None))
     if cc_list:
         msg["Cc"] = ", ".join(cc_list)   # send_message 가 To+Cc 모두에게 보낸다
-    # 앱이 보낸 메일 표식 — 우리 회신이 다시 '신규 요청'으로 오인되지 않게 필터가 이걸 본다.
-    if app_marker:
-        msg["X-TW-Automation"] = app_marker
-    # 원본 Message-ID 가 있으면 회신 스레드로 이어붙인다.
-    mid = (in_reply_to or "").strip()
-    if mid:
-        if not (mid.startswith("<") and mid.endswith(">")):
-            mid = f"<{mid.strip('<>')}>"
-        msg["In-Reply-To"] = mid
-        # References = 원본 체인 + 원본 Message-ID (없으면 Message-ID 만).
-        ref = (references or "").strip()
-        msg["References"] = (f"{ref} {mid}".strip()) if ref else mid
-    # 회신이면 원본을 본문 아래에 인용해 붙인다 — 새로 쓴 몇 줄만 가면 받는 사람이
-    # 무엇에 대한 답인지 알 수 없다(사용자 지적 2026-08-19).
-    _sig = signature or _pf_sig
+    # 앱이 보낸 메일 표식 — 같은 사서함을 읽는 tw-next 의 수신 필터가 이걸 보고 신규 요청에서 뺀다.
+    msg["X-TW-Automation"] = "1"
     plain = body
-    if _sig:
-        plain = plain.rstrip() + chr(10) * 2 + html_to_text(_sig)
-    if quote:
-        plain = plain.rstrip() + chr(10) + quote
+    if signature:
+        plain = plain.rstrip() + chr(10) * 2 + html_to_text(signature)
     msg.set_content(plain)
-    # 사내 메일과 같은 서식(맑은 고딕 10pt · 인용부 구분선)으로 보이도록 HTML 판을
-    # **모든 메일에** 함께 싣는다. 평문만 보내면 글꼴도 구분선도 없이 밋밋하게 뜬다
+    # 사내 메일과 같은 서식(맑은 고딕 10pt)으로 보이도록 HTML 판을 함께 싣는다
     # (사용자 지적 2026-08-19).
-    msg.add_alternative(
-        build_html_mail(body, quote=quote_html,
-                        signature=(signature or _pf_sig)),
-        subtype="html")
-    for fname, data in attachments or []:
-        msg.add_attachment(data, maintype="application", subtype="octet-stream", filename=fname)
+    msg.add_alternative(build_html_mail(body, signature=signature), subtype="html")
 
     try:
         with smtplib.SMTP(ident.host, ident.port, timeout=30) as s:

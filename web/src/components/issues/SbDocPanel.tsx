@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { DISCLOSURE_TONE, kst, SB_STATE_TONE, type SbDoc, type SbList, type SbPreview } from "@/lib/issues";
+import { DISCLOSURE_TONE, kst, SB_STATE_TONE, type SbDoc, type SbList } from "@/lib/issues";
 import { cx } from "@/components/ui";
 import { Btn, Modal, useToast } from "./kit";
 import { RichEditor } from "./RichEditor";
 
-type Form = { title: string; disclosure: string; applies_to: string; description_html: string; partners: string[]; labels: string[] };
+type Form = { title: string; disclosure: string; applies_to: string; description_html: string; partners: string[] };
 
 function formOf(d: SbDoc): Form {
   return { title: d.title, disclosure: d.disclosure, applies_to: d.applies_to, description_html: d.description_html,
-           partners: [...d.partners], labels: [...d.labels] };
+           partners: [...d.partners] };
 }
 
 export function SbStateChip({ d }: { d: Pick<SbDoc, "state" | "state_label"> }) {
@@ -34,23 +34,21 @@ function Field({ label, children, hint }: { label: string; children: React.React
 
 const input = "w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-[14px] outline-none focus:border-brand";
 
-/** SB 문서 한 건 — 상태에 맞는 화면(생성 대기 · 실패 · 편집 · 업로드 완료 · 폐기). */
+/** SB 문서 한 건 — 상태에 맞는 화면(생성 대기 · 실패 · 편집 · 확정 · 폐기). */
 export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList; onChanged: (d?: SbDoc) => void }) {
   const toast = useToast();
   const [form, setForm] = useState<Form>(formOf(doc));
   const [busy, setBusy] = useState<string>("");
-  const [preview, setPreview] = useState<SbPreview | null>(null);
-  const [askUpload, setAskUpload] = useState(false);
+  const [askApprove, setAskApprove] = useState(false);
   const [askDiscard, setAskDiscard] = useState(false);
   const [discardReason, setDiscardReason] = useState("");
 
   useEffect(() => {
     setForm(formOf(doc));
-    setPreview(null);
   }, [doc.id, doc.state, doc.generated_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(formOf(doc)), [form, doc]);
-  const editable = ["draft", "notified", "approved"].includes(doc.state);
+  const editable = ["draft", "notified"].includes(doc.state);
 
   async function call<T>(name: string, path: string, body?: unknown): Promise<T | null> {
     setBusy(name);
@@ -68,17 +66,13 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
     const r = await call<{ message: string; doc: SbDoc }>("save", `/api/issues/sb/${doc.id}/save`, form);
     if (r) { toast(r.message); onChanged(r.doc); }
   }
-  async function doPreview() {
-    const r = await call<SbPreview>("preview", `/api/issues/sb/${doc.id}/preview`, form);
-    if (r) setPreview(r);
-  }
   async function notify() {
     const r = await call<{ message: string }>("notify", `/api/issues/sb/${doc.id}/notify`, form);
     if (r) { toast(r.message); onChanged(); }
   }
-  async function upload() {
-    setAskUpload(false);
-    const r = await call<{ message: string }>("upload", `/api/issues/sb/${doc.id}/upload`, form);
+  async function approve() {
+    setAskApprove(false);
+    const r = await call<{ message: string }>("approve", `/api/issues/sb/${doc.id}/approve`, form);
     if (r) { toast(r.message); onChanged(); }
   }
   async function generate() {
@@ -112,16 +106,12 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
     if (r) { toast(r.message, "info"); onChanged(); }
   }
 
-  function setDisclosure(v: string) {
-    // 등급을 바꾸면 라벨도 그 등급 기본값으로 바로 바꾼다 — 이전 등급 라벨이 남지 않게.
-    setForm((f) => ({ ...f, disclosure: v, labels: meta.default_labels[v] ?? f.labels, partners: v === "partner" ? f.partners : f.partners }));
-  }
-  function toggle(list: "partners" | "labels", key: string) {
-    setForm((f) => ({ ...f, [list]: f[list].includes(key) ? f[list].filter((x) => x !== key) : [...f[list], key] }));
+  function togglePartner(key: string) {
+    setForm((f) => ({ ...f, partners: f.partners.includes(key) ? f.partners.filter((x) => x !== key) : [...f.partners, key] }));
   }
 
   const times = [
-    ["해결", doc.resolved_at], ["생성", doc.generated_at], ["검토 요청", doc.notified_at], ["업로드", doc.uploaded_at],
+    ["해결", doc.resolved_at], ["생성", doc.generated_at], ["검토 요청", doc.notified_at], ["확정", doc.state === "approved" ? doc.decided_at : ""],
   ].filter(([, v]) => v) as [string, string][];
 
   return (
@@ -162,16 +152,19 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
           </div>
         )}
 
-        {doc.state === "uploaded" && (
+        {doc.state === "approved" && (
           <div className="rounded-xl bg-ok-soft px-4 py-3">
             <div className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-ok">
-              업로드 완료
-              {doc.url && <a href={doc.url} target="_blank" rel="noreferrer" className="underline">Confluence 에서 열기 ↗</a>}
+              확정됨
+              <DisclosureTag v={doc.disclosure} />
               {doc.decided_by && <span className="font-normal">· {doc.decided_by}</span>}
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">{doc.labels.map((l) => <span key={l} className="rounded-md border border-line bg-surface px-1.5 text-[11.5px]">{l}</span>)}</div>
             {doc.applies_to && <div className="mt-2 text-[12.5px] text-ink-2">Applies to: {doc.applies_to}</div>}
+            <Btn className="mt-3" busy={busy === "reopen"} onClick={reopen}>확정 취소 (초안으로)</Btn>
           </div>
+        )}
+        {doc.state === "approved" && doc.description_html && (
+          <div className="rich rounded-xl border border-line px-4 py-3" dangerouslySetInnerHTML={{ __html: doc.description_html }} />
         )}
 
         {doc.state === "discarded" && (
@@ -196,36 +189,23 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
             <Field label="제목" hint="Troubleshooting 문서는 '[TR] ' 로 시작">
               <input className={input} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             </Field>
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <Field label="공개 등급">
-                <div className="grid grid-cols-2 gap-1.5">
-                  {Object.entries(meta.templates).map(([k, t]) => (
-                    <button key={k} type="button" onClick={() => setDisclosure(k)}
-                            className={cx("rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition-colors",
-                              form.disclosure === k ? "border-brand bg-brand-soft text-brand-ink" : "border-line-strong hover:bg-surface-2")}>
-                      <span className="font-semibold">{k}</span> <span className="text-ink-3">{t.ko}</span>
-                    </button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="라벨" hint="등급을 바꾸면 그 등급의 기본 라벨로 바뀐다 · 'posted' 는 외부에 실제 게시한 문서용">
-                <div className="flex flex-wrap gap-1.5">
-                  {meta.known_labels.map((l) => (
-                    <button key={l} type="button" onClick={() => toggle("labels", l)}
-                            className={cx("rounded-full border px-2.5 py-1 text-[12.5px] font-semibold",
-                              form.labels.includes(l) ? "border-brand bg-brand text-white" : "border-line-strong text-ink-2 hover:bg-surface-2")}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-            </div>
+            <Field label="공개 등급">
+              <div className="grid grid-cols-2 gap-1.5 md:grid-cols-4">
+                {Object.entries(meta.disclosures).map(([k, ko]) => (
+                  <button key={k} type="button" onClick={() => setForm({ ...form, disclosure: k })}
+                          className={cx("rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition-colors",
+                            form.disclosure === k ? "border-brand bg-brand-soft text-brand-ink" : "border-line-strong hover:bg-surface-2")}>
+                    <span className="font-semibold">{k}</span> <span className="text-ink-3">{ko}</span>
+                  </button>
+                ))}
+              </div>
+            </Field>
             {form.disclosure === "partner" && (
               <Field label="공개 파트너">
                 <div className="flex flex-wrap gap-3">
                   {Object.entries(meta.partners).map(([k, label]) => (
                     <label key={k} className="inline-flex items-center gap-2 text-[13px]">
-                      <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={form.partners.includes(k)} onChange={() => toggle("partners", k)} />
+                      <input type="checkbox" className="h-4 w-4 accent-[var(--brand)]" checked={form.partners.includes(k)} onChange={() => togglePartner(k)} />
                       {label}
                     </label>
                   ))}
@@ -241,23 +221,6 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
                           placeholder="배경 → 증상 → 원인 → 해결 순서로 작성" />
             </div>
 
-            {preview && (
-              <div className="rounded-xl border border-line">
-                <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface-2 px-4 py-2.5 text-[12.5px]">
-                  <span className="font-semibold text-ok">✔ 문법 정상</span>
-                  <span className="text-ink-2">제목 &lsquo;{preview.title}&rsquo;</span>
-                  {preview.labels.map((l) => <span key={l} className="rounded-md border border-line bg-surface px-1.5 text-[11px]">{l}</span>)}
-                  <button onClick={() => setPreview(null)} className="ml-auto text-ink-3 hover:text-ink">닫기</button>
-                </div>
-                {preview.exists && (
-                  <div className="border-b border-line bg-warn-soft px-4 py-2 text-[12.5px] text-warn">
-                    같은 제목의 페이지가 이미 있음 (id {preview.exists.id}) — 이 제목으로는 업로드가 거부된다
-                    {preview.exists.url && <> · <a className="underline" href={preview.exists.url} target="_blank" rel="noreferrer">열기</a></>}
-                  </div>
-                )}
-                <div className="rich px-4 py-3" dangerouslySetInnerHTML={{ __html: preview.html }} />
-              </div>
-            )}
           </>
         )}
       </div>
@@ -265,27 +228,23 @@ export function SbDocPanel({ doc, meta, onChanged }: { doc: SbDoc; meta: SbList;
       {editable && (
         <div className="flex flex-wrap items-center gap-2 border-t border-line bg-surface px-5 py-3">
           <Btn onClick={save} busy={busy === "save"} disabled={!!busy && busy !== "save"}>{dirty ? "저장 •" : "저장"}</Btn>
-          <Btn onClick={doPreview} busy={busy === "preview"} disabled={!!busy && busy !== "preview"} title="저장하고 Confluence 변환 API 로 문법을 검증한 뒤 렌더 결과를 본다">미리보기·검증</Btn>
           {doc.state === "draft" && (
             <Btn kind="soft" onClick={notify} busy={busy === "notify"} disabled={!!busy && busy !== "notify"}
                  title={`수신: ${doc.email || "담당자 주소를 못 만들어 관리자에게"}`}>검토 요청 메일</Btn>
           )}
-          <Btn kind="primary" onClick={() => setAskUpload(true)} busy={busy === "upload"} disabled={!!busy && busy !== "upload"}>Confluence 업로드</Btn>
+          <Btn kind="primary" onClick={() => setAskApprove(true)} busy={busy === "approve"} disabled={!!busy && busy !== "approve"}>확정</Btn>
           <span className="flex-1" />
           <Btn kind="danger" onClick={() => setAskDiscard(true)} disabled={!!busy}>폐기</Btn>
         </div>
       )}
 
-      <Modal open={askUpload} onClose={() => setAskUpload(false)} title="Confluence 에 업로드"
-             actions={<><Btn onClick={() => setAskUpload(false)}>취소</Btn><Btn kind="primary" onClick={upload}>업로드</Btn></>}>
+      <Modal open={askApprove} onClose={() => setAskApprove(false)} title="이 문서를 확정"
+             actions={<><Btn onClick={() => setAskApprove(false)}>취소</Btn><Btn kind="primary" onClick={approve}>확정</Btn></>}>
         <dl className="grid grid-cols-[80px_1fr] gap-y-1.5 text-[13.5px]">
-          <dt className="text-ink-3">스페이스</dt><dd>SB</dd>
           <dt className="text-ink-3">제목</dt><dd className="break-all font-semibold">{form.title}</dd>
-          <dt className="text-ink-3">공개 등급</dt><dd><DisclosureTag v={form.disclosure} /> {meta.templates[form.disclosure]?.ko}</dd>
-          <dt className="text-ink-3">라벨</dt><dd>{form.labels.join(", ") || "등급 기본값"}</dd>
-          <dt className="text-ink-3">방식</dt><dd>{doc.page_id ? `기존 페이지 갱신 (id ${doc.page_id})` : "새 페이지"}</dd>
+          <dt className="text-ink-3">공개 등급</dt><dd><DisclosureTag v={form.disclosure} /> {meta.disclosures[form.disclosure]}</dd>
         </dl>
-        <p className="mt-3 text-[12.5px] text-ink-3">올린 페이지는 Confluence 에서 직접 지워야 없어진다.</p>
+        <p className="mt-3 text-[12.5px] text-ink-3">저장한 뒤 확정한다. 확정한 문서는 고칠 수 없고, 확정을 취소하면 다시 초안이 된다.</p>
       </Modal>
 
       <Modal open={askDiscard} onClose={() => setAskDiscard(false)} title="이 초안을 폐기"

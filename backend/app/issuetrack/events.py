@@ -252,20 +252,6 @@ class Timings:
     participants: list[str] = field(default_factory=list)
     comment_count: int = 0
 
-    @staticmethod
-    def _days(a: datetime | None, b: datetime | None) -> float | None:
-        if not a or not b:
-            return None
-        return (b - a).total_seconds() / 86400
-
-    @property
-    def days_to_first_response(self) -> float | None:
-        return self._days(self.created_at, self.first_response_at)
-
-    @property
-    def days_to_resolve(self) -> float | None:
-        return self._days(self.created_at, self.resolved_at)
-
     # 업무일 기준 — 주말·한국 공휴일을 뺀다(사용자 확정 2026-08-11).
     @property
     def lead_workdays(self) -> float | None:

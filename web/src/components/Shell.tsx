@@ -75,7 +75,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <main className="min-w-0">
         {me.data && !me.data.live && (
           <Link href="/settings/shadow" className="block border-b border-[#f2d49b] bg-[#fff7e6] px-4 py-2 text-[13px] text-[#8a5a00] lg:px-8 dark:border-[#5a4310] dark:bg-[#2a2210] dark:text-[#f0c36a]">
-            <b>검증 모드</b> — Confluence 업로드·메일을 실제로 보내지 않고 기록만 합니다. 기록 보기 →
+            <b>검증 모드</b> — 메일을 실제로 보내지 않고 기록만 합니다. 기록 보기 →
           </Link>
         )}
         <div className="mx-auto w-full max-w-[1280px] px-4 py-7 lg:px-8">{children}</div>

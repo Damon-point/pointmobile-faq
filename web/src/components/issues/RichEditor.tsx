@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cx } from "@/components/ui";
 
-/** Redmine 본문 · SB 본문 · Confluence 렌더 결과에 쓰는 글 서식(표·목록·코드) */
+/** Redmine 본문 · SB 본문에 쓰는 글 서식(표·목록·코드) */
 export function RichStyle() {
   return (
     <style>{`
@@ -45,7 +45,6 @@ const TOOLS: { cmd: string; arg?: string; label: React.ReactNode; title: string 
 
 /**
  * 서식 편집기. 버튼으로 서식을 넣고, </> 로 HTML 원문을 직접 고친다.
- * XHTML 문법은 맞추지 않아도 된다 — 업로드할 때 Confluence 변환 API 가 정규화한다.
  */
 export function RichEditor({ value, onChange, placeholder, minHeight = 340 }: {
   value: string; onChange: (html: string) => void; placeholder?: string; minHeight?: number;

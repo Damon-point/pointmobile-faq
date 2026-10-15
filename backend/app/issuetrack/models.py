@@ -180,9 +180,8 @@ class SBDoc(IssuetrackBase):
       queued   — 감시 시작 후 새로 Resolved 됨. 다음 주기에 자동 생성.
       draft    — 초안 생성 완료(담당자에게 아직 안 알림)
       notified — 담당자에게 검토 요청 메일을 보냈다
-      approved — 담당자가 업로드하기로 했다
-      uploaded — Confluence 에 실제로 올라갔다
-      discarded— 올리지 않기로 했다
+      approved — 담당자가 내용을 확정했다(SB 의 결과물)
+      discarded— 쓰지 않기로 했다
       error    — 생성 중 실패(사유는 error 컬럼)
 
     한 이슈가 ReOpen 후 다시 Resolved 되면 **새 행**을 만들고(revision +1) 이전 행은
@@ -219,8 +218,6 @@ class SBDoc(IssuetrackBase):
     description_html: Mapped[str | None] = mapped_column(Text)
     #: partner 등급일 때 공개 대상. JSON 배열 문자열.
     partners_json: Mapped[str | None] = mapped_column(Text)
-    template_id: Mapped[str | None] = mapped_column(String(30))
-    labels_json: Mapped[str | None] = mapped_column(Text)
 
     assignee_name: Mapped[str | None] = mapped_column(String(120))
     assignee_email: Mapped[str | None] = mapped_column(String(200))
@@ -230,15 +227,11 @@ class SBDoc(IssuetrackBase):
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
 
-    confluence_page_id: Mapped[str | None] = mapped_column(String(30))
-    confluence_url: Mapped[str | None] = mapped_column(String(500))
-
     created_at: Mapped[datetime | None] = mapped_column(DateTime)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime)
     notified_at: Mapped[datetime | None] = mapped_column(DateTime)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime)
     decided_by: Mapped[str | None] = mapped_column(String(120))
-    uploaded_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     issue: Mapped["Issue"] = relationship()
 

@@ -2,7 +2,7 @@
 
 User          : 로그인 계정
 MailCredential: 메일 발송 계정(비밀번호는 암호화 저장)
-WebCredential : Redmine · Confluence 로그인(공용 — admin 계정 행)
+WebCredential : Redmine 로그인(공용 — admin 계정 행)
 Staff         : 사내 인원 명부(Redmine 작성자 → 이름·팀, 담당자 주소)
 MailTemplate  : 메일 문구(SB 검토 요청 등)
 AppSetting    : 화면에서 바꾸는 설정(Claude 경로 · 검증 모드)
@@ -65,7 +65,7 @@ class MailCredential(Base):
     email_address: Mapped[str] = mapped_column(String(200))
     # Fernet 로 암호화된 앱 비밀번호 (평문 저장 금지)
     encrypted_password: Mapped[str] = mapped_column(Text)
-    pop_server: Mapped[str] = mapped_column(String(200), default="outlook.office365.com")
+    pop_server: Mapped[str] = mapped_column(String(200), default="outlook.office365.com")   # SMTP 호스트를 여기서 정한다
     pop_port: Mapped[int] = mapped_column(Integer, default=995)
     use_ssl: Mapped[bool] = mapped_column(Boolean, default=True)
     #: 이 사람의 메일 서명(Outlook 에서 복사해 붙인 HTML 그대로).
@@ -78,10 +78,10 @@ class MailCredential(Base):
 
 
 class WebCredential(Base):
-    """브라우저 자동화용 웹 편집 계정 (Confluence 페이지 / 네이버 등).
+    """웹 서비스 로그인 계정 — 지금은 Redmine(target='redmine') 하나.
 
-    세션이 만료되면 저장된 username/password 로 자동 재로그인한다.
-    로그인/편집 셀렉터는 사이트마다 달라 컬럼으로 저장(설정에서 튜닝 가능).
+    login_url 과 셀렉터 컬럼들은 tw-next 의 브라우저 자동화 때 쓰던 것으로, 이 앱은 읽지 않는다.
+    표 구조를 tw-next 와 맞춰 둔 것뿐이다.
     """
 
     __tablename__ = "web_credentials"
@@ -93,12 +93,12 @@ class WebCredential(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    target: Mapped[str] = mapped_column(String(30))  # confluence / naver
+    target: Mapped[str] = mapped_column(String(30))  # redmine
     base_url: Mapped[str] = mapped_column(String(500), default="")
     login_url: Mapped[str] = mapped_column(String(500), default="")  # 비우면 base_url 사용
     username: Mapped[str] = mapped_column(String(200), default="")
     encrypted_password: Mapped[str] = mapped_column(Text, default="")
-    # 편집 흐름 셀렉터 (기본값 = Confluence 클래식)
+    # 편집 흐름 셀렉터 (tw-next 브라우저 자동화용 — 이 앱은 쓰지 않음)
     edit_url_template: Mapped[str] = mapped_column(
         String(500), default="{base}/pages/editpage.action?pageId={page_id}"
     )
@@ -112,19 +112,9 @@ class WebCredential(Base):
 
 
 class Staff(Base):
-    """사내 인원 명부 — **메일을 보내오는 사람**을 관리자가 직접 관리한다.
+    """사내 인원 명부 — 이름 · 메일 주소 · 팀. 로그인 계정(User)과 별개다(app/staff.py).
 
-    로그인 계정(User)과 별개다. 대부분의 직원은 앱 계정이 없고, 우리는 그 사람이
-    보낸 메일을 어떻게 다룰지만 알면 된다.
-
-    이 명부가 예전에 흩어져 있던 두 목록을 대신한다:
-      · is_dqa      → DQA FOTA 테스트 전용 처리 대상(예전: work/whitelist_dqa_senders.json)
-      · is_handler  → 화이트리스트 처리 담당. 이 사람이 보낸 메일은 **완료 안내·회신**이라
-                      신규 요청 목록에서 뺀다(예전: mail_filter.EXCLUDED_SENDERS 하드코딩)
-
-    status 는 표시용이다. 퇴사했다고 역할을 자동으로 끄지 않는다 — 메일함에는 과거
-    메일이 남아 있어서, 재직 중 보낸 요청은 계속 맞게 분류돼야 한다. 끄거나 지우는
-    것은 관리자가 판단한다(사용자 확정 2026-08-06).
+    is_dqa · is_handler 는 tw-next 의 FOTA · WhiteList 메일 판정용이었다. 이 앱은 읽지도 쓰지도 않는다.
     """
 
     __tablename__ = "staff"
